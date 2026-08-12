@@ -1,0 +1,276 @@
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+  .dtt { font-family: 'Inter', sans-serif; color: #EDEDF5; }
+  .dtt-display { font-family: 'Space Grotesk', sans-serif; }
+  .dtt-mono { font-family: 'JetBrains Mono', monospace; }
+  .dtt-scroll::-webkit-scrollbar { width: 6px; }
+  .dtt-scroll::-webkit-scrollbar-thumb { background: #3A3A52; border-radius: 3px; }
+  .dtt-btn { cursor: pointer; border: none; transition: transform .1s, background .15s; }
+  .dtt-btn:active { transform: scale(0.97); }
+  .dtt-input { font-family: 'Inter', sans-serif; background: #1D1D2C; border: 1px solid #2E2E42; color: #EDEDF5; border-radius: 8px; padding: 8px 10px; font-size: 13px; outline: none; }
+  .dtt-input:focus { border-color: #6C5CE7; }
+  .dtt-input::placeholder { color: #6B6B84; }
+</style>
+
+<div class="dtt" style="background:#101018; border-radius:16px; padding:24px; max-width:760px;">
+
+  <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:18px;">
+    <h2 class="dtt-display" style="margin:0; font-size:20px; font-weight:600; letter-spacing:-0.01em;">Suivi des tickets</h2>
+    <span id="dtt-sync" style="font-size:11px; color:#6B6B84;">chargement...</span>
+  </div>
+
+  <div id="dtt-oldest" style="display:none; align-items:center; gap:10px; background:#241417; border-left:3px solid #FF5C77; border-radius:0 8px 8px 0; padding:10px 14px; margin-bottom:16px;">
+    <i class="ti ti-alert-triangle" style="font-size:18px; color:#FF9B9B;" aria-hidden="true"></i>
+    <div style="flex:1; min-width:0;">
+      <div style="font-size:12px; color:#FF9B9B; font-weight:500;">Ticket ouvert depuis le plus longtemps</div>
+      <div id="dtt-oldest-text" style="font-size:13px; color:#EDEDF5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:20px;">
+    <div style="background:#1D1D2C; border-radius:10px; padding:12px;">
+      <div style="font-size:11px; color:#9797AC;">Ouverts</div>
+      <div id="dtt-stat-open" class="dtt-display" style="font-size:22px; font-weight:600;">0</div>
+    </div>
+    <div style="background:#1D1D2C; border-radius:10px; padding:12px;">
+      <div style="font-size:11px; color:#9797AC;">En cours</div>
+      <div id="dtt-stat-progress" class="dtt-display" style="font-size:22px; font-weight:600;">0</div>
+    </div>
+    <div style="background:#1D1D2C; border-radius:10px; padding:12px;">
+      <div style="font-size:11px; color:#9797AC;">En attente</div>
+      <div id="dtt-stat-waiting" class="dtt-display" style="font-size:22px; font-weight:600;">0</div>
+    </div>
+    <div style="background:#1D1D2C; border-radius:10px; padding:12px;">
+      <div style="font-size:11px; color:#9797AC;">Âge moyen</div>
+      <div id="dtt-stat-age" class="dtt-display" style="font-size:22px; font-weight:600;">-</div>
+    </div>
+  </div>
+
+  <div style="background:#171722; border-radius:12px; padding:16px; margin-bottom:20px;">
+    <div style="font-size:13px; font-weight:500; margin-bottom:10px; color:#C7C7D9;">Nouveau ticket</div>
+    <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:8px; margin-bottom:8px;">
+      <input class="dtt-input" id="dtt-title" placeholder="Sujet du ticket" />
+      <input class="dtt-input" id="dtt-requester" placeholder="Membre (pseudo)" />
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px;">
+      <select class="dtt-input" id="dtt-category">
+        <option value="Support">Support</option>
+        <option value="Signalement">Signalement</option>
+        <option value="Achat">Achat</option>
+        <option value="Autre">Autre</option>
+      </select>
+      <select class="dtt-input" id="dtt-priority">
+        <option value="normal">Priorité normale</option>
+        <option value="urgent">Urgent</option>
+        <option value="low">Faible</option>
+      </select>
+      <input class="dtt-input" id="dtt-assignee" placeholder="Assigné à (optionnel)" />
+      <button class="dtt-btn" id="dtt-add" style="background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:8px 16px; font-size:13px; font-weight:500; white-space:nowrap;">
+        <i class="ti ti-plus" style="font-size:15px; vertical-align:-2px; margin-right:4px;" aria-hidden="true"></i>Créer
+      </button>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+    <select class="dtt-input" id="dtt-filter-status" style="font-size:12px; padding:6px 8px;">
+      <option value="all">Tous les statuts</option>
+      <option value="open">Ouvert</option>
+      <option value="progress">En cours</option>
+      <option value="waiting">En attente</option>
+      <option value="closed">Fermé</option>
+    </select>
+    <select class="dtt-input" id="dtt-filter-priority" style="font-size:12px; padding:6px 8px;">
+      <option value="all">Toutes priorités</option>
+      <option value="urgent">Urgent</option>
+      <option value="normal">Normal</option>
+      <option value="low">Faible</option>
+    </select>
+    <span style="margin-left:auto; font-size:11px; color:#6B6B84; align-self:center;">Trié par ancienneté</span>
+  </div>
+
+  <div id="dtt-list" class="dtt-scroll" style="display:flex; flex-direction:column; gap:8px; max-height:480px; overflow-y:auto;"></div>
+  <div id="dtt-empty" style="display:none; text-align:center; padding:32px 0; color:#6B6B84; font-size:13px;">Aucun ticket pour ce filtre.</div>
+
+</div>
+
+<script>
+(function() {
+  const KEY = 'tickets';
+  let tickets = [];
+
+  const priorityStyle = {
+    urgent:  { bg:'#2E1418', text:'#FF9B9B', label:'Urgent' },
+    normal:  { bg:'#2E2410', text:'#FFC978', label:'Normal' },
+    low:     { bg:'#0F2A28', text:'#7DE0D3', label:'Faible' }
+  };
+  const statusStyle = {
+    open:     { bg:'#211D3A', text:'#B3A6F7', label:'Ouvert' },
+    progress: { bg:'#2E2410', text:'#FFC978', label:'En cours' },
+    waiting:  { bg:'#12233A', text:'#8FC1F7', label:'En attente' },
+    closed:   { bg:'#22222E', text:'#8A8A9E', label:'Fermé' }
+  };
+
+  function ageText(ts) {
+    const mins = Math.floor((Date.now() - ts) / 60000);
+    if (mins < 60) return mins + ' min';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + ' h';
+    return Math.floor(hrs / 24) + ' j';
+  }
+
+  function ageColor(ts) {
+    const hrs = (Date.now() - ts) / 3600000;
+    if (hrs > 24) return '#FF9B9B';
+    if (hrs > 6) return '#FFC978';
+    return '#9797AC';
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      tickets = raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      tickets = [];
+    }
+    document.getElementById('dtt-sync').textContent = 'stocké sur cet appareil';
+    render();
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(tickets));
+    } catch (e) {
+      document.getElementById('dtt-sync').textContent = 'erreur de sauvegarde';
+    }
+  }
+
+  function addTicket() {
+    const title = document.getElementById('dtt-title').value.trim();
+    const requester = document.getElementById('dtt-requester').value.trim();
+    if (!title || !requester) return;
+    const category = document.getElementById('dtt-category').value;
+    const priority = document.getElementById('dtt-priority').value;
+    const assignee = document.getElementById('dtt-assignee').value.trim();
+
+    tickets.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      title, requester, category, priority, assignee,
+      status: 'open',
+      createdAt: Date.now()
+    });
+
+    document.getElementById('dtt-title').value = '';
+    document.getElementById('dtt-requester').value = '';
+    document.getElementById('dtt-assignee').value = '';
+    save();
+    render();
+  }
+
+  function setStatus(id, status) {
+    const t = tickets.find(x => x.id === id);
+    if (t) t.status = status;
+    save();
+    render();
+  }
+
+  function removeTicket(id) {
+    tickets = tickets.filter(x => x.id !== id);
+    save();
+    render();
+  }
+
+  function render() {
+    const filterStatus = document.getElementById('dtt-filter-status').value;
+    const filterPriority = document.getElementById('dtt-filter-priority').value;
+
+    const open = tickets.filter(t => t.status === 'open').length;
+    const progress = tickets.filter(t => t.status === 'progress').length;
+    const waiting = tickets.filter(t => t.status === 'waiting').length;
+    document.getElementById('dtt-stat-open').textContent = open;
+    document.getElementById('dtt-stat-progress').textContent = progress;
+    document.getElementById('dtt-stat-waiting').textContent = waiting;
+
+    const active = tickets.filter(t => t.status !== 'closed');
+    if (active.length) {
+      const avgMs = active.reduce((s, t) => s + (Date.now() - t.createdAt), 0) / active.length;
+      document.getElementById('dtt-stat-age').textContent = ageText(Date.now() - avgMs);
+    } else {
+      document.getElementById('dtt-stat-age').textContent = '-';
+    }
+
+    const oldestBox = document.getElementById('dtt-oldest');
+    if (active.length) {
+      const oldest = active.reduce((a, b) => a.createdAt < b.createdAt ? a : b);
+      oldestBox.style.display = 'flex';
+      document.getElementById('dtt-oldest-text').textContent =
+        oldest.title + ' — ' + oldest.requester + ' (' + ageText(oldest.createdAt) + ')';
+    } else {
+      oldestBox.style.display = 'none';
+    }
+
+    let list = tickets.filter(t =>
+      (filterStatus === 'all' || t.status === filterStatus) &&
+      (filterPriority === 'all' || t.priority === filterPriority)
+    );
+    list.sort((a, b) => a.createdAt - b.createdAt);
+
+    const container = document.getElementById('dtt-list');
+    const empty = document.getElementById('dtt-empty');
+    container.innerHTML = '';
+    empty.style.display = list.length ? 'none' : 'block';
+
+    list.forEach(t => {
+      const p = priorityStyle[t.priority];
+      const s = statusStyle[t.status];
+      const row = document.createElement('div');
+      row.style.cssText = 'background:#171722; border-radius:10px; padding:10px 12px; display:flex; align-items:center; gap:10px;';
+      row.innerHTML = `
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:3px;">
+            <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.title)}</span>
+            <span style="font-size:10px; padding:2px 7px; border-radius:5px; background:${p.bg}; color:${p.text}; white-space:nowrap;">${p.label}</span>
+          </div>
+          <div style="font-size:11px; color:#8A8A9E; display:flex; gap:8px; align-items:center;">
+            <span>${escapeHtml(t.requester)}</span>
+            <span>&middot;</span>
+            <span>${escapeHtml(t.category)}</span>
+            ${t.assignee ? '<span>&middot;</span><span>' + escapeHtml(t.assignee) + '</span>' : ''}
+            <span>&middot;</span>
+            <span class="dtt-mono" style="color:${ageColor(t.createdAt)};">${ageText(t.createdAt)}</span>
+          </div>
+        </div>
+        <select data-id="${t.id}" class="dtt-status-select dtt-input" style="font-size:11px; padding:5px 6px; background:${s.bg}; color:${s.text}; border:none;">
+          <option value="open" ${t.status==='open'?'selected':''}>Ouvert</option>
+          <option value="progress" ${t.status==='progress'?'selected':''}>En cours</option>
+          <option value="waiting" ${t.status==='waiting'?'selected':''}>En attente</option>
+          <option value="closed" ${t.status==='closed'?'selected':''}>Fermé</option>
+        </select>
+        <button data-id="${t.id}" class="dtt-btn dtt-remove" style="background:transparent; padding:6px; border-radius:6px; color:#6B6B84;" aria-label="Supprimer">
+          <i class="ti ti-trash" style="font-size:15px;" aria-hidden="true"></i>
+        </button>
+      `;
+      container.appendChild(row);
+    });
+
+    container.querySelectorAll('.dtt-status-select').forEach(sel => {
+      sel.addEventListener('change', e => setStatus(e.target.dataset.id, e.target.value));
+    });
+    container.querySelectorAll('.dtt-remove').forEach(btn => {
+      btn.addEventListener('click', e => removeTicket(e.currentTarget.dataset.id));
+    });
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  document.getElementById('dtt-add').addEventListener('click', addTicket);
+  document.getElementById('dtt-filter-status').addEventListener('change', render);
+  document.getElementById('dtt-filter-priority').addEventListener('change', render);
+  setInterval(render, 60000);
+
+  load();
+})();
+</script>
