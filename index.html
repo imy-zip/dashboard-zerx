@@ -56,11 +56,11 @@
     <span style="font-size:11px; color:#6B6B84;">jour(s)</span>
   </div>
 
-  <div id="dtt-oldest" style="display:none; align-items:center; gap:10px; background:#241417; border-left:3px solid #FF5C77; border-radius:0 8px 8px 0; padding:10px 14px; margin-bottom:18px;">
-    <i class="ti ti-alert-triangle" style="font-size:18px; color:#FF9B9B;" aria-hidden="true"></i>
+  <div id="dtt-oldest" style="display:none; align-items:center; gap:14px; background:#2A1518; border:2px solid #FF5C77; border-radius:12px; padding:16px 20px; margin-bottom:18px;">
+    <i class="ti ti-alert-triangle" style="font-size:26px; color:#FF5C77; flex-shrink:0;" aria-hidden="true"></i>
     <div style="flex:1; min-width:0;">
-      <div style="font-size:12px; color:#FF9B9B; font-weight:500;">En attente depuis le plus longtemps</div>
-      <div id="dtt-oldest-text" style="font-size:13px; color:#EDEDF5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+      <div style="font-size:13px; color:#FF9B9B; font-weight:600; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:3px;">En attente depuis le plus longtemps</div>
+      <div id="dtt-oldest-text" style="font-size:16px; color:#EDEDF5; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
     </div>
   </div>
 
@@ -127,7 +127,7 @@
     <i class="ti ti-archive" style="font-size:14px; vertical-align:-2px; margin-right:6px;" aria-hidden="true"></i>
     <span id="dtt-archive-label">Voir les commandes validées (0)</span>
   </button>
-  <div id="dtt-archive-list" style="display:none; margin-top:12px; background:#131320; border-radius:12px; padding:12px;"></div>
+  <div id="dtt-archive-list" style="display:none; margin-top:12px; background:#131320; border-radius:12px; padding:12px; overflow-x:auto;"></div>
 
 </div>
 
@@ -383,9 +383,13 @@
   function renderChart() {
     if (typeof Chart === 'undefined') return;
     const now = new Date();
+    const startYear = 2026, startMonthIdx = 7; // août 2026
+    const startTotal = startYear * 12 + startMonthIdx;
+    const nowTotal = now.getFullYear() * 12 + now.getMonth();
+    const monthsBack = Math.min(5, Math.max(0, nowTotal - startTotal));
     const labels = [];
     const sums = [];
-    for (let i = 5; i >= 0; i--) {
+    for (let i = monthsBack; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const k = monthKey(d);
       let sum = 0;
@@ -518,18 +522,21 @@
     const totalCommission = done.reduce((s, t) => s + (t.commission || 0), 0);
     const totalAmount = done.reduce((s, t) => s + (t.amount || 0), 0);
     const list = document.getElementById('dtt-archive-list');
-    const header = '<div style="display:flex; align-items:center; gap:28px; padding:0 4px 10px; border-bottom:1px solid #1F1F2E; margin-bottom:6px;">' +
+    const header = '<div style="display:flex; align-items:center; gap:28px; padding:0 4px 10px; border-bottom:1px solid #1F1F2E; margin-bottom:6px; min-width:760px;">' +
       '<div><div style="font-size:12px; color:#9797AC;">Total commandes</div>' +
         '<div class="dtt-display" style="font-size:16px; font-weight:600;">' + totalAmount.toFixed(2) + ' €</div></div>' +
       '<div><div style="font-size:12px; color:#9797AC;">Total commissions</div>' +
         '<div class="dtt-display" style="font-size:16px; font-weight:600; color:#9FE08E;">' + totalCommission.toFixed(2) + ' €</div></div>' +
     '</div>';
     const rows = done.length
-      ? done.map(t =>
-          '<div style="padding:8px 4px; border-bottom:1px solid #1F1F2E;">' +
+      ? done.map(t => {
+          const vAt = getValidatedAt(t);
+          return '<div style="padding:8px 4px; border-bottom:1px solid #1F1F2E; min-width:760px;">' +
           '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">' +
             '<span class="dtt-mono" style="font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.title) + '</span>' +
             '<span style="font-size:11px; color:#8A8A9E; white-space:nowrap;">' + escapeHtml(t.requester) + '</span>' +
+            '<span style="font-size:11px; color:#8A8A9E; white-space:nowrap;">' + (t.assignee ? escapeHtml(t.assignee) : '—') + '</span>' +
+            '<span class="dtt-mono" style="font-size:11px; color:#6B6B84; white-space:nowrap;">' + (vAt ? fmtDateTime(vAt) : '—') + '</span>' +
             '<span class="dtt-mono" style="font-size:12px; white-space:nowrap;">' + (t.amount || 0).toFixed(2) + ' €</span>' +
             '<span style="font-size:11px; color:#6B6B84; white-space:nowrap;">' + (t.commissionPct != null ? t.commissionPct + '%' : '') + '</span>' +
             '<span class="dtt-mono" style="font-size:12px; color:#9FE08E; white-space:nowrap;">+' + (t.commission || 0).toFixed(2) + ' €</span>' +
@@ -538,8 +545,8 @@
             '<button data-id="' + t.id + '" class="dtt-btn dtt-remove-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Supprimer"><i class="ti ti-trash" style="font-size:13px;" aria-hidden="true"></i></button>' +
           '</div>' +
           historyHtml(t) +
-          '</div>'
-        ).join('')
+          '</div>';
+        }).join('')
       : '<div style="text-align:center; padding:12px 0; color:#4E4E64; font-size:12px;">Aucune commande validée.</div>';
     list.innerHTML = header + rows;
     list.querySelectorAll('.dtt-remove-archived').forEach(btn => {
