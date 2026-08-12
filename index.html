@@ -50,12 +50,6 @@
     <span id="dtt-sync" style="font-size:11px; color:#6B6B84;">chargement...</span>
   </div>
 
-  <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-    <label for="dtt-threshold" style="font-size:11px; color:#6B6B84;">Alerte "plus ancien" si en attente depuis plus de</label>
-    <input type="number" id="dtt-threshold" min="0" step="1" style="width:52px; background:#171722; border:1px solid #2A2A3D; color:#EDEDF5; border-radius:6px; padding:4px 6px; font-size:12px; text-align:center;" />
-    <span style="font-size:11px; color:#6B6B84;">jour(s)</span>
-  </div>
-
   <div id="dtt-oldest" style="display:none; flex-direction:column; gap:10px; background:#2A1518; border:2px solid #FF5C77; border-radius:12px; padding:16px 20px; margin-bottom:18px;">
     <div style="display:flex; align-items:center; gap:10px;">
       <i class="ti ti-alert-triangle" style="font-size:22px; color:#FF5C77; flex-shrink:0;" aria-hidden="true"></i>
@@ -83,10 +77,18 @@
     </div>
   </div>
 
-  <div style="background:#131320; border-radius:12px; padding:14px 16px; margin-bottom:22px;">
-    <div style="font-size:12px; color:#9797AC; margin-bottom:10px;">Évolution des commissions (6 derniers mois)</div>
-    <div style="position:relative; height:180px;">
-      <canvas id="dtt-chart"></canvas>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:22px;">
+    <div style="background:#131320; border-radius:12px; padding:14px 16px;">
+      <div style="font-size:12px; color:#9797AC; margin-bottom:10px;">Commissions — ce mois-ci (par jour)</div>
+      <div style="position:relative; height:180px;">
+        <canvas id="dtt-chart-daily"></canvas>
+      </div>
+    </div>
+    <div style="background:#131320; border-radius:12px; padding:14px 16px;">
+      <div style="font-size:12px; color:#9797AC; margin-bottom:10px;">Commissions — 6 derniers mois</div>
+      <div style="position:relative; height:180px;">
+        <canvas id="dtt-chart"></canvas>
+      </div>
     </div>
   </div>
 
@@ -152,9 +154,7 @@
   const MONTH_NAMES = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 
   const KEY = 'tickets';
-  const THRESHOLD_KEY = 'oldestThresholdDays';
   let tickets = [];
-  let oldestThresholdDays = 2;
   let expandedHistory = {};
   let chartInstance = null;
 
@@ -185,6 +185,10 @@
     if (hrs >= s.alertHours) return '#FF9B9B';
     if (hrs >= s.alertHours * 0.6) return '#FFC978';
     return '#9797AC';
+  }
+
+  function fmtEUR(n) {
+    return (n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
   }
 
   function escapeHtml(str) {
@@ -231,18 +235,6 @@
     } catch (e) {
       document.getElementById('dtt-sync').textContent = 'erreur de sauvegarde';
     }
-  }
-
-  function loadThreshold() {
-    const raw = localStorage.getItem(THRESHOLD_KEY);
-    oldestThresholdDays = raw !== null && raw !== '' ? Number(raw) : 2;
-    document.getElementById('dtt-threshold').value = oldestThresholdDays;
-  }
-
-  function saveThreshold(val) {
-    oldestThresholdDays = Number(val) || 0;
-    localStorage.setItem(THRESHOLD_KEY, oldestThresholdDays);
-    renderOldest();
   }
 
   function addTicket() {
@@ -317,6 +309,9 @@
   }
 
   function removeTicket(id) {
+    const t = tickets.find(x => x.id === id);
+    const label = t ? (t.title + ' — ' + t.requester) : 'ce ticket';
+    if (!window.confirm('Supprimer définitivement ' + label + ' ? Cette action est irréversible.')) return;
     tickets = tickets.filter(x => x.id !== id);
     save();
     render();
@@ -356,7 +351,7 @@
     const list = document.getElementById('dtt-oldest-list');
     const active = tickets.filter(t => t.status !== 'valide');
     const late = active
-      .filter(t => (Date.now() - t.createdAt) / 86400000 >= oldestThresholdDays)
+      .filter(t => isOverdue(t))
       .sort((a, b) => a.createdAt - b.createdAt);
 
     if (late.length) {
@@ -395,10 +390,59 @@
 
     document.getElementById('dtt-month-current-label').textContent = MONTH_NAMES[now.getMonth()] + ' ' + now.getFullYear();
     document.getElementById('dtt-month-prev-label').textContent = MONTH_NAMES[prevDate.getMonth()] + ' ' + prevDate.getFullYear();
-    document.getElementById('dtt-month-current-amount').textContent = curAmount.toFixed(2) + ' €';
-    document.getElementById('dtt-month-current-commission').textContent = curCommission.toFixed(2) + ' €';
-    document.getElementById('dtt-month-prev-amount').textContent = prevAmount.toFixed(2) + ' €';
-    document.getElementById('dtt-month-prev-commission').textContent = prevCommission.toFixed(2) + ' €';
+    document.getElementById('dtt-month-current-amount').textContent = fmtEUR(curAmount);
+    document.getElementById('dtt-month-current-commission').textContent = fmtEUR(curCommission);
+    document.getElementById('dtt-month-prev-amount').textContent = fmtEUR(prevAmount);
+    document.getElementById('dtt-month-prev-commission').textContent = fmtEUR(prevCommission);
+  }
+
+  let dailyChartInstance = null;
+
+  function renderDailyChart() {
+    if (typeof Chart === 'undefined') return;
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const labels = [];
+    const sums = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      let sum = 0;
+      tickets.forEach(t => {
+        const vAt = getValidatedAt(t);
+        if (vAt == null) return;
+        const vd = new Date(vAt);
+        if (vd.getFullYear() === now.getFullYear() && vd.getMonth() === now.getMonth() && vd.getDate() === d) {
+          sum += (t.commission || 0);
+        }
+      });
+      labels.push(String(d));
+      sums.push(Math.round(sum * 100) / 100);
+    }
+    const ctx = document.getElementById('dtt-chart-daily');
+    if (!ctx) return;
+    if (dailyChartInstance) dailyChartInstance.destroy();
+    dailyChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: sums,
+          borderColor: '#6C5CE7',
+          backgroundColor: 'rgba(108,92,231,0.15)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#9797AC', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: '#1F1F2E' }, ticks: { color: '#9797AC', font: { size: 11 } } }
+        }
+      }
+    });
   }
 
   function renderChart() {
@@ -545,9 +589,9 @@
     const list = document.getElementById('dtt-archive-list');
     const header = '<div style="display:flex; align-items:center; gap:28px; padding:0 4px 10px; border-bottom:1px solid #1F1F2E; margin-bottom:6px; min-width:820px;">' +
       '<div><div style="font-size:12px; color:#9797AC;">Total commandes</div>' +
-        '<div class="dtt-display" style="font-size:16px; font-weight:600;">' + totalAmount.toFixed(2) + ' €</div></div>' +
+        '<div class="dtt-display" style="font-size:16px; font-weight:600;">' + fmtEUR(totalAmount) + '</div></div>' +
       '<div><div style="font-size:12px; color:#9797AC;">Total commissions</div>' +
-        '<div class="dtt-display" style="font-size:16px; font-weight:600; color:#9FE08E;">' + totalCommission.toFixed(2) + ' €</div></div>' +
+        '<div class="dtt-display" style="font-size:16px; font-weight:600; color:#9FE08E;">' + fmtEUR(totalCommission) + '</div></div>' +
     '</div>';
     const rows = done.length
       ? done.map(t => {
@@ -560,9 +604,9 @@
             '<span style="font-size:11px; color:#8A8A9E; white-space:nowrap;">' + escapeHtml(t.requester) + '</span>' +
             '<span style="font-size:11px; color:#8A8A9E; white-space:nowrap;">' + (t.assignee ? escapeHtml(t.assignee) : '—') + '</span>' +
             '<span class="dtt-mono" style="font-size:11px; color:#6B6B84; white-space:nowrap;">' + (vAt ? fmtDateTime(vAt) : '—') + '</span>' +
-            '<span class="dtt-mono" style="font-size:12px; white-space:nowrap;">' + (t.orderType === 'B' ? '—' : (t.amount || 0).toFixed(2) + ' €') + '</span>' +
+            '<span class="dtt-mono" style="font-size:12px; white-space:nowrap;">' + (t.orderType === 'B' ? '—' : fmtEUR(t.amount)) + '</span>' +
             '<span style="font-size:11px; color:#6B6B84; white-space:nowrap;">' + (t.commissionPct != null ? t.commissionPct + '%' : '') + '</span>' +
-            '<span class="dtt-mono" style="font-size:12px; color:#9FE08E; white-space:nowrap;">+' + (t.commission || 0).toFixed(2) + ' €</span>' +
+            '<span class="dtt-mono" style="font-size:12px; color:#9FE08E; white-space:nowrap;">+' + fmtEUR(t.commission) + '</span>' +
             '<button data-id="' + t.id + '" class="dtt-btn dtt-hist-btn" aria-label="Historique"><i class="ti ti-history" style="font-size:13px;" aria-hidden="true"></i></button>' +
             '<button data-id="' + t.id + '" class="dtt-btn dtt-edit-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Modifier"><i class="ti ti-edit" style="font-size:13px;" aria-hidden="true"></i></button>' +
             '<button data-id="' + t.id + '" class="dtt-btn dtt-remove-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Supprimer"><i class="ti ti-trash" style="font-size:13px;" aria-hidden="true"></i></button>' +
@@ -587,17 +631,16 @@
     renderStats();
     renderOldest();
     renderMonthStats();
+    renderDailyChart();
     renderChart();
     renderBoard();
     renderArchive();
   }
 
   initStatusSelect();
-  loadThreshold();
   document.getElementById('dtt-add').addEventListener('click', addTicket);
   document.getElementById('dtt-filter-priority').addEventListener('change', renderBoard);
   document.getElementById('dtt-search').addEventListener('input', () => { renderBoard(); renderArchive(); });
-  document.getElementById('dtt-threshold').addEventListener('change', e => saveThreshold(e.target.value));
   document.getElementById('dtt-archive-toggle').addEventListener('click', () => {
     const list = document.getElementById('dtt-archive-list');
     list.style.display = list.style.display === 'none' ? 'block' : 'none';
