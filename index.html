@@ -34,9 +34,11 @@
   }
   .dtt-input:focus { border-color: #6C5CE7; }
   .dtt-input::placeholder { color: #6B6B84; }
-  .dtt-col { background: #131320; border-radius: 12px; padding: 12px; min-width: 240px; display: flex; flex-direction: column; }
+  .dtt-col { background: #131320; border-radius: 12px; padding: 12px; min-width: 200px; display: flex; flex-direction: column; }
   .dtt-card { background: #1B1B29; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: default; }
   .dtt-card:last-child { margin-bottom: 0; }
+  .dtt-hist-btn { background: transparent; padding: 4px 6px; color: #6B6B84; border-radius: 6px; }
+  .dtt-hist-row { display:flex; align-items:center; gap:8px; font-size:11px; color:#9797AC; padding:3px 0; }
 </style>
 </head>
 <body>
@@ -62,7 +64,31 @@
     </div>
   </div>
 
-  <div id="dtt-stats" style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:10px; margin-bottom:20px;"></div>
+  <div id="dtt-stats" style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:10px; margin-bottom:16px;"></div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
+    <div style="background:#131320; border-radius:10px; padding:14px;">
+      <div style="font-size:12px; color:#9797AC; margin-bottom:8px;" id="dtt-month-current-label">Ce mois-ci</div>
+      <div style="display:flex; gap:20px;">
+        <div><div style="font-size:11px; color:#6B6B84;">Commandes</div><div class="dtt-display" id="dtt-month-current-amount" style="font-size:18px; font-weight:600;">0,00 €</div></div>
+        <div><div style="font-size:11px; color:#6B6B84;">Commissions</div><div class="dtt-display" id="dtt-month-current-commission" style="font-size:18px; font-weight:600; color:#9FE08E;">0,00 €</div></div>
+      </div>
+    </div>
+    <div style="background:#131320; border-radius:10px; padding:14px;">
+      <div style="font-size:12px; color:#9797AC; margin-bottom:8px;" id="dtt-month-prev-label">Mois précédent</div>
+      <div style="display:flex; gap:20px;">
+        <div><div style="font-size:11px; color:#6B6B84;">Commandes</div><div class="dtt-display" id="dtt-month-prev-amount" style="font-size:18px; font-weight:600;">0,00 €</div></div>
+        <div><div style="font-size:11px; color:#6B6B84;">Commissions</div><div class="dtt-display" id="dtt-month-prev-commission" style="font-size:18px; font-weight:600; color:#9FE08E;">0,00 €</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:#131320; border-radius:12px; padding:14px 16px; margin-bottom:22px;">
+    <div style="font-size:12px; color:#9797AC; margin-bottom:10px;">Évolution des commissions (6 derniers mois)</div>
+    <div style="position:relative; height:180px;">
+      <canvas id="dtt-chart"></canvas>
+    </div>
+  </div>
 
   <div style="background:#131320; border-radius:12px; padding:16px; margin-bottom:22px;">
     <div style="font-size:13px; font-weight:500; margin-bottom:10px; color:#C7C7D9;">Nouvelle commande</div>
@@ -84,7 +110,8 @@
     </div>
   </div>
 
-  <div style="display:flex; gap:8px; margin-bottom:14px; align-items:center;">
+  <div style="display:flex; gap:8px; margin-bottom:14px; align-items:center; flex-wrap:wrap;">
+    <input class="dtt-input" id="dtt-search" placeholder="Rechercher un numéro de ticket ou un client" style="width:280px;" />
     <select class="dtt-input" id="dtt-filter-priority" style="width:auto; font-size:12px; padding:6px 8px;">
       <option value="all">Toutes priorités</option>
       <option value="urgent">Urgent</option>
@@ -104,16 +131,17 @@
 
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script>
 (function() {
   const STATUSES = [
-    { id: 'commande',  label: 'Attente commande',  bg:'#2E1418', text:'#FF9B9B', alertHours: 7 * 24 },
-    { id: 'reception', label: 'Attente réception',  bg:'#2E2410', text:'#FFC978', alertHours: 7 * 24 },
-    { id: 'boxing',    label: 'Attente boxing',     bg:'#12233A', text:'#8FC1F7', alertHours: 2 * 24 },
-    { id: 'boxing_send', label: 'Boxing Send',      bg:'#1B1830', text:'#B3A6F7', alertHours: null },
-    { id: 'boxe',      label: 'Boxé',               bg:'#0F2A28', text:'#7DE0D3', alertHours: 15 * 24 },
-    { id: 'paiement',  label: 'Attente paiement',   bg:'#2A1230', text:'#E3A6F7', alertHours: 2 * 24 },
-    { id: 'valide',    label: 'Validé',             bg:'#17301A', text:'#9FE08E', alertHours: null }
+    { id: 'commande',    label: 'Attente commande',  bg:'#2E1418', text:'#FF9B9B', alertHours: 7 * 24 },
+    { id: 'reception',   label: 'Attente réception',  bg:'#2E2410', text:'#FFC978', alertHours: 7 * 24 },
+    { id: 'boxing',      label: 'Attente boxing',     bg:'#12233A', text:'#8FC1F7', alertHours: 2 * 24 },
+    { id: 'boxing_send', label: 'Boxing Send',        bg:'#1B1830', text:'#B3A6F7', alertHours: 7 * 24 },
+    { id: 'boxe',        label: 'Boxé',               bg:'#0F2A28', text:'#7DE0D3', alertHours: 15 * 24 },
+    { id: 'paiement',    label: 'Attente paiement',   bg:'#2A1230', text:'#E3A6F7', alertHours: 2 * 24 },
+    { id: 'valide',      label: 'Validé',             bg:'#17301A', text:'#9FE08E', alertHours: null }
   ];
   const ACTIVE_STATUSES = STATUSES.filter(s => s.id !== 'valide');
   const priorityStyle = {
@@ -121,9 +149,14 @@
     normal:  { bg:'#2E2410', text:'#FFC978', label:'Normal' },
     low:     { bg:'#0F2A28', text:'#7DE0D3', label:'Faible' }
   };
+  const MONTH_NAMES = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 
   const KEY = 'tickets';
+  const THRESHOLD_KEY = 'oldestThresholdDays';
   let tickets = [];
+  let oldestThresholdDays = 2;
+  let expandedHistory = {};
+  let chartInstance = null;
 
   function statusOf(id) { return STATUSES.find(s => s.id === id); }
 
@@ -133,15 +166,6 @@
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return hrs + ' h';
     return Math.floor(hrs / 24) + ' j';
-  }
-
-  function ageColor(t) {
-    const s = statusOf(t.status);
-    const hrs = (Date.now() - t.createdAt) / 3600000;
-    if (!s.alertHours) return '#9797AC';
-    if (hrs >= s.alertHours) return '#FF9B9B';
-    if (hrs >= s.alertHours * 0.6) return '#FFC978';
-    return '#9797AC';
   }
 
   function isOverdue(t) {
@@ -154,10 +178,40 @@
     return isOverdue(t) ? 'urgent' : t.priority;
   }
 
+  function ageColor(t) {
+    const s = statusOf(t.status);
+    const hrs = (Date.now() - t.createdAt) / 3600000;
+    if (!s.alertHours) return '#9797AC';
+    if (hrs >= s.alertHours) return '#FF9B9B';
+    if (hrs >= s.alertHours * 0.6) return '#FFC978';
+    return '#9797AC';
+  }
+
   function escapeHtml(str) {
     const d = document.createElement('div');
     d.textContent = str;
     return d.innerHTML;
+  }
+
+  function fmtDateTime(ts) {
+    return new Date(ts).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+  }
+
+  function getHistory(t) {
+    return (t.history && t.history.length) ? t.history : [{ status: t.status, at: t.createdAt }];
+  }
+
+  function pushHistory(t, status) {
+    if (!t.history) t.history = [];
+    t.history.push({ status, at: Date.now() });
+  }
+
+  function getValidatedAt(t) {
+    const hist = t.history || [];
+    for (let i = hist.length - 1; i >= 0; i--) {
+      if (hist[i].status === 'valide') return hist[i].at;
+    }
+    return t.status === 'valide' ? t.createdAt : null;
   }
 
   function load() {
@@ -179,6 +233,18 @@
     }
   }
 
+  function loadThreshold() {
+    const raw = localStorage.getItem(THRESHOLD_KEY);
+    oldestThresholdDays = raw !== null && raw !== '' ? Number(raw) : 2;
+    document.getElementById('dtt-threshold').value = oldestThresholdDays;
+  }
+
+  function saveThreshold(val) {
+    oldestThresholdDays = Number(val) || 0;
+    localStorage.setItem(THRESHOLD_KEY, oldestThresholdDays);
+    renderOldest();
+  }
+
   function addTicket() {
     const title = document.getElementById('dtt-title').value.trim();
     const requester = document.getElementById('dtt-requester').value.trim();
@@ -187,12 +253,15 @@
     const status = document.getElementById('dtt-status').value;
     const assignee = document.getElementById('dtt-assignee').value.trim();
 
-    tickets.push({
+    const t = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       title, requester, priority, assignee,
       status,
-      createdAt: Date.now()
-    });
+      createdAt: Date.now(),
+      history: []
+    };
+    pushHistory(t, status);
+    tickets.push(t);
 
     document.getElementById('dtt-title').value = '';
     document.getElementById('dtt-requester').value = '';
@@ -201,18 +270,27 @@
     render();
   }
 
+  function askAmounts(t) {
+    const amountInput = window.prompt('Montant de la commande (€) pour ' + t.title, t.amount != null ? t.amount : '');
+    if (amountInput === null) return false;
+    const pctInput = window.prompt('Pourcentage de commission (%) pour ' + t.title, t.commissionPct != null ? t.commissionPct : '');
+    if (pctInput === null) return false;
+    const amount = Math.round(parseFloat(String(amountInput).replace(',', '.')) * 100) / 100 || 0;
+    const pct = Math.round(parseFloat(String(pctInput).replace(',', '.')) * 100) / 100 || 0;
+    t.amount = amount;
+    t.commissionPct = pct;
+    t.commission = Math.round(amount * pct) / 100;
+    return true;
+  }
+
   function setStatus(id, status) {
     const t = tickets.find(x => x.id === id);
     if (!t) return;
     if (status === 'valide') {
-      const amountInput = window.prompt('Montant de la commande (€) pour ' + t.title, t.amount != null ? t.amount : '');
-      if (amountInput === null) return;
-      const commissionInput = window.prompt('Montant de la commission prise (€) pour ' + t.title, t.commission != null ? t.commission : '');
-      if (commissionInput === null) return;
-      t.amount = Math.round(parseFloat(amountInput.replace(',', '.')) * 100) / 100 || 0;
-      t.commission = Math.round(parseFloat(commissionInput.replace(',', '.')) * 100) / 100 || 0;
+      if (!askAmounts(t)) return;
     }
     t.status = status;
+    pushHistory(t, status);
     save();
     render();
   }
@@ -220,19 +298,17 @@
   function editAmounts(id) {
     const t = tickets.find(x => x.id === id);
     if (!t) return;
-    const amountInput = window.prompt('Montant de la commande (€) pour ' + t.title, t.amount != null ? t.amount : '');
-    if (amountInput === null) return;
-    const commissionInput = window.prompt('Montant de la commission prise (€) pour ' + t.title, t.commission != null ? t.commission : '');
-    if (commissionInput === null) return;
-    t.amount = Math.round(parseFloat(amountInput.replace(',', '.')) * 100) / 100 || 0;
-    t.commission = Math.round(parseFloat(commissionInput.replace(',', '.')) * 100) / 100 || 0;
-    save();
-    render();
+    if (askAmounts(t)) { save(); render(); }
   }
 
   function removeTicket(id) {
     tickets = tickets.filter(x => x.id !== id);
     save();
+    render();
+  }
+
+  function toggleHistory(id) {
+    expandedHistory[id] = !expandedHistory[id];
     render();
   }
 
@@ -252,21 +328,6 @@
     }).join('');
   }
 
-  const THRESHOLD_KEY = 'oldestThresholdDays';
-  let oldestThresholdDays = 2;
-
-  function loadThreshold() {
-    const raw = localStorage.getItem(THRESHOLD_KEY);
-    oldestThresholdDays = raw !== null && raw !== '' ? Number(raw) : 2;
-    document.getElementById('dtt-threshold').value = oldestThresholdDays;
-  }
-
-  function saveThreshold(val) {
-    oldestThresholdDays = Number(val) || 0;
-    localStorage.setItem(THRESHOLD_KEY, oldestThresholdDays);
-    renderOldest();
-  }
-
   function renderOldest() {
     const box = document.getElementById('dtt-oldest');
     const active = tickets.filter(t => t.status !== 'valide');
@@ -283,6 +344,85 @@
     } else {
       box.style.display = 'none';
     }
+  }
+
+  function monthKey(d) { return d.getFullYear() + '-' + d.getMonth(); }
+
+  function renderMonthStats() {
+    const now = new Date();
+    const curKey = monthKey(now);
+    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevKey = monthKey(prevDate);
+
+    let curAmount = 0, curCommission = 0, prevAmount = 0, prevCommission = 0;
+    tickets.forEach(t => {
+      const vAt = getValidatedAt(t);
+      if (vAt == null) return;
+      const d = new Date(vAt);
+      const k = monthKey(d);
+      if (k === curKey) { curAmount += (t.amount || 0); curCommission += (t.commission || 0); }
+      else if (k === prevKey) { prevAmount += (t.amount || 0); prevCommission += (t.commission || 0); }
+    });
+
+    document.getElementById('dtt-month-current-label').textContent = MONTH_NAMES[now.getMonth()] + ' ' + now.getFullYear();
+    document.getElementById('dtt-month-prev-label').textContent = MONTH_NAMES[prevDate.getMonth()] + ' ' + prevDate.getFullYear();
+    document.getElementById('dtt-month-current-amount').textContent = curAmount.toFixed(2) + ' €';
+    document.getElementById('dtt-month-current-commission').textContent = curCommission.toFixed(2) + ' €';
+    document.getElementById('dtt-month-prev-amount').textContent = prevAmount.toFixed(2) + ' €';
+    document.getElementById('dtt-month-prev-commission').textContent = prevCommission.toFixed(2) + ' €';
+  }
+
+  function renderChart() {
+    if (typeof Chart === 'undefined') return;
+    const now = new Date();
+    const labels = [];
+    const sums = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const k = monthKey(d);
+      let sum = 0;
+      tickets.forEach(t => {
+        const vAt = getValidatedAt(t);
+        if (vAt == null) return;
+        if (monthKey(new Date(vAt)) === k) sum += (t.commission || 0);
+      });
+      labels.push(MONTH_NAMES[d.getMonth()]);
+      sums.push(Math.round(sum * 100) / 100);
+    }
+    const ctx = document.getElementById('dtt-chart');
+    if (!ctx) return;
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: sums,
+          backgroundColor: '#6C5CE7',
+          borderRadius: 4,
+          maxBarThickness: 36
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#9797AC', font: { size: 11 } } },
+          y: { grid: { color: '#1F1F2E' }, ticks: { color: '#9797AC', font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  function historyHtml(t) {
+    if (!expandedHistory[t.id]) return '';
+    const hist = getHistory(t);
+    return '<div style="margin-top:8px; padding-top:8px; border-top:1px solid #26263A;">' +
+      hist.map(h => '<div class="dtt-hist-row"><i class="ti ti-point-filled" style="font-size:10px;" aria-hidden="true"></i>' +
+        '<span>' + escapeHtml(statusOf(h.status) ? statusOf(h.status).label : h.status) + '</span>' +
+        '<span style="margin-left:auto;" class="dtt-mono">' + fmtDateTime(h.at) + '</span></div>').join('') +
+    '</div>';
   }
 
   function cardHtml(t) {
@@ -304,19 +444,29 @@
         '<select data-id="' + t.id + '" class="dtt-move dtt-input" style="font-size:11px; padding:5px 6px;">' +
           STATUSES.map(s => '<option value="' + s.id + '" ' + (t.status===s.id?'selected':'') + '>' + s.label + '</option>').join('') +
         '</select>' +
+        '<button data-id="' + t.id + '" class="dtt-btn dtt-hist-btn" aria-label="Historique"><i class="ti ti-history" style="font-size:14px;" aria-hidden="true"></i></button>' +
         '<button data-id="' + t.id + '" class="dtt-btn dtt-remove" style="background:transparent; padding:5px 8px; border-radius:6px; color:#6B6B84;" aria-label="Supprimer">' +
           '<i class="ti ti-trash" style="font-size:14px;" aria-hidden="true"></i>' +
         '</button>' +
       '</div>' +
+      historyHtml(t) +
     '</div>';
+  }
+
+  function matchesSearch(t, q) {
+    if (!q) return true;
+    q = q.toLowerCase();
+    return t.title.toLowerCase().includes(q) || t.requester.toLowerCase().includes(q);
   }
 
   function renderBoard() {
     const filterPriority = document.getElementById('dtt-filter-priority').value;
+    const search = document.getElementById('dtt-search').value.trim();
     const board = document.getElementById('dtt-board');
     board.innerHTML = ACTIVE_STATUSES.map(s => {
       let colTickets = tickets.filter(t => t.status === s.id &&
-        (filterPriority === 'all' || effectivePriority(t) === filterPriority));
+        (filterPriority === 'all' || effectivePriority(t) === filterPriority) &&
+        matchesSearch(t, search));
       colTickets.sort((a, b) => a.createdAt - b.createdAt);
       const cards = colTickets.length
         ? colTickets.map(cardHtml).join('')
@@ -336,10 +486,14 @@
     board.querySelectorAll('.dtt-remove').forEach(btn => {
       btn.addEventListener('click', e => removeTicket(e.currentTarget.dataset.id));
     });
+    board.querySelectorAll('.dtt-hist-btn').forEach(btn => {
+      btn.addEventListener('click', e => toggleHistory(e.currentTarget.dataset.id));
+    });
   }
 
   function renderArchive() {
-    const done = tickets.filter(t => t.status === 'valide').sort((a, b) => b.createdAt - a.createdAt);
+    const search = document.getElementById('dtt-search').value.trim();
+    const done = tickets.filter(t => t.status === 'valide' && matchesSearch(t, search)).sort((a, b) => b.createdAt - a.createdAt);
     document.getElementById('dtt-archive-label').textContent = 'Voir les commandes validées (' + done.length + ')';
     const totalCommission = done.reduce((s, t) => s + (t.commission || 0), 0);
     const totalAmount = done.reduce((s, t) => s + (t.amount || 0), 0);
@@ -352,13 +506,18 @@
     '</div>';
     const rows = done.length
       ? done.map(t =>
-          '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 4px; border-bottom:1px solid #1F1F2E;">' +
+          '<div style="padding:8px 4px; border-bottom:1px solid #1F1F2E;">' +
+          '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">' +
             '<span class="dtt-mono" style="font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.title) + '</span>' +
             '<span style="font-size:11px; color:#8A8A9E; white-space:nowrap;">' + escapeHtml(t.requester) + '</span>' +
             '<span class="dtt-mono" style="font-size:12px; white-space:nowrap;">' + (t.amount || 0).toFixed(2) + ' €</span>' +
+            '<span style="font-size:11px; color:#6B6B84; white-space:nowrap;">' + (t.commissionPct != null ? t.commissionPct + '%' : '') + '</span>' +
             '<span class="dtt-mono" style="font-size:12px; color:#9FE08E; white-space:nowrap;">+' + (t.commission || 0).toFixed(2) + ' €</span>' +
+            '<button data-id="' + t.id + '" class="dtt-btn dtt-hist-btn" aria-label="Historique"><i class="ti ti-history" style="font-size:13px;" aria-hidden="true"></i></button>' +
             '<button data-id="' + t.id + '" class="dtt-btn dtt-edit-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Modifier"><i class="ti ti-edit" style="font-size:13px;" aria-hidden="true"></i></button>' +
             '<button data-id="' + t.id + '" class="dtt-btn dtt-remove-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Supprimer"><i class="ti ti-trash" style="font-size:13px;" aria-hidden="true"></i></button>' +
+          '</div>' +
+          historyHtml(t) +
           '</div>'
         ).join('')
       : '<div style="text-align:center; padding:12px 0; color:#4E4E64; font-size:12px;">Aucune commande validée.</div>';
@@ -369,11 +528,16 @@
     list.querySelectorAll('.dtt-edit-archived').forEach(btn => {
       btn.addEventListener('click', e => editAmounts(e.currentTarget.dataset.id));
     });
+    list.querySelectorAll('.dtt-hist-btn').forEach(btn => {
+      btn.addEventListener('click', e => toggleHistory(e.currentTarget.dataset.id));
+    });
   }
 
   function render() {
     renderStats();
     renderOldest();
+    renderMonthStats();
+    renderChart();
     renderBoard();
     renderArchive();
   }
@@ -382,6 +546,7 @@
   loadThreshold();
   document.getElementById('dtt-add').addEventListener('click', addTicket);
   document.getElementById('dtt-filter-priority').addEventListener('change', renderBoard);
+  document.getElementById('dtt-search').addEventListener('input', () => { renderBoard(); renderArchive(); });
   document.getElementById('dtt-threshold').addEventListener('change', e => saveThreshold(e.target.value));
   document.getElementById('dtt-archive-toggle').addEventListener('click', () => {
     const list = document.getElementById('dtt-archive-list');
