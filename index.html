@@ -307,13 +307,9 @@
     render();
   }
 
-  function simulateAge(id) {
+  function applySimulatedAge(id, days) {
     const t = tickets.find(x => x.id === id);
-    if (!t) return;
-    const daysInput = window.prompt('TEST — simuler ce ticket comme créé il y a combien de jours ?', '0');
-    if (daysInput === null) return;
-    const days = parseFloat(String(daysInput).replace(',', '.'));
-    if (isNaN(days)) return;
+    if (!t || isNaN(days)) return;
     t.createdAt = Date.now() - days * 86400000;
     save();
     render();
@@ -457,10 +453,14 @@
           STATUSES.map(s => '<option value="' + s.id + '" ' + (t.status===s.id?'selected':'') + '>' + s.label + '</option>').join('') +
         '</select>' +
         '<button data-id="' + t.id + '" class="dtt-btn dtt-hist-btn" aria-label="Historique"><i class="ti ti-history" style="font-size:14px;" aria-hidden="true"></i></button>' +
-        '<button data-id="' + t.id + '" class="dtt-btn dtt-simulate" style="background:transparent; padding:5px 8px; border-radius:6px; color:#6B6B84;" title="TEST — simuler l\'ancienneté" aria-label="Simuler ancienneté"><i class="ti ti-flask" style="font-size:14px;" aria-hidden="true"></i></button>' +
         '<button data-id="' + t.id + '" class="dtt-btn dtt-remove" style="background:transparent; padding:5px 8px; border-radius:6px; color:#6B6B84;" aria-label="Supprimer">' +
           '<i class="ti ti-trash" style="font-size:14px;" aria-hidden="true"></i>' +
         '</button>' +
+      '</div>' +
+      '<div style="display:flex; gap:6px; margin-top:6px; align-items:center;">' +
+        '<span style="font-size:10px; color:#6B6B84; white-space:nowrap;">TEST — jours:</span>' +
+        '<input type="number" step="0.1" class="dtt-input dtt-sim-input" data-id="' + t.id + '" style="width:56px; padding:4px 6px; font-size:11px;" placeholder="0" />' +
+        '<button data-id="' + t.id + '" class="dtt-btn dtt-sim-apply" style="background:#2A2A3D; color:#EDEDF5; border-radius:6px; padding:4px 10px; font-size:11px; white-space:nowrap;">Appliquer</button>' +
       '</div>' +
       historyHtml(t) +
     '</div>';
@@ -502,8 +502,12 @@
     board.querySelectorAll('.dtt-hist-btn').forEach(btn => {
       btn.addEventListener('click', e => toggleHistory(e.currentTarget.dataset.id));
     });
-    board.querySelectorAll('.dtt-simulate').forEach(btn => {
-      btn.addEventListener('click', e => simulateAge(e.currentTarget.dataset.id));
+    board.querySelectorAll('.dtt-sim-apply').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const id = e.currentTarget.dataset.id;
+        const input = board.querySelector('.dtt-sim-input[data-id="' + id + '"]');
+        applySimulatedAge(id, parseFloat(input.value));
+      });
     });
   }
 
