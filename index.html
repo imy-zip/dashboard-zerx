@@ -48,6 +48,12 @@
     <span id="dtt-sync" style="font-size:11px; color:#6B6B84;">chargement...</span>
   </div>
 
+  <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+    <label for="dtt-threshold" style="font-size:11px; color:#6B6B84;">Alerte "plus ancien" si en attente depuis plus de</label>
+    <input type="number" id="dtt-threshold" min="0" step="1" style="width:52px; background:#171722; border:1px solid #2A2A3D; color:#EDEDF5; border-radius:6px; padding:4px 6px; font-size:12px; text-align:center;" />
+    <span style="font-size:11px; color:#6B6B84;">jour(s)</span>
+  </div>
+
   <div id="dtt-oldest" style="display:none; align-items:center; gap:10px; background:#241417; border-left:3px solid #FF5C77; border-radius:0 8px 8px 0; padding:10px 14px; margin-bottom:18px;">
     <i class="ti ti-alert-triangle" style="font-size:18px; color:#FF9B9B;" aria-hidden="true"></i>
     <div style="flex:1; min-width:0;">
@@ -219,14 +225,34 @@
     }).join('');
   }
 
+  const THRESHOLD_KEY = 'oldestThresholdDays';
+  let oldestThresholdDays = 2;
+
+  function loadThreshold() {
+    const raw = localStorage.getItem(THRESHOLD_KEY);
+    oldestThresholdDays = raw !== null && raw !== '' ? Number(raw) : 2;
+    document.getElementById('dtt-threshold').value = oldestThresholdDays;
+  }
+
+  function saveThreshold(val) {
+    oldestThresholdDays = Number(val) || 0;
+    localStorage.setItem(THRESHOLD_KEY, oldestThresholdDays);
+    renderOldest();
+  }
+
   function renderOldest() {
     const box = document.getElementById('dtt-oldest');
     const active = tickets.filter(t => t.status !== 'valide');
     if (active.length) {
       const oldest = active.reduce((a, b) => a.createdAt < b.createdAt ? a : b);
-      box.style.display = 'flex';
-      document.getElementById('dtt-oldest-text').textContent =
-        oldest.title + ' — ' + oldest.requester + ' · ' + statusOf(oldest.status).label + ' (' + ageText(oldest.createdAt) + ')';
+      const days = (Date.now() - oldest.createdAt) / 86400000;
+      if (days >= oldestThresholdDays) {
+        box.style.display = 'flex';
+        document.getElementById('dtt-oldest-text').textContent =
+          oldest.title + ' — ' + oldest.requester + ' · ' + statusOf(oldest.status).label + ' (' + ageText(oldest.createdAt) + ')';
+      } else {
+        box.style.display = 'none';
+      }
     } else {
       box.style.display = 'none';
     }
@@ -311,8 +337,10 @@
   }
 
   initStatusSelect();
+  loadThreshold();
   document.getElementById('dtt-add').addEventListener('click', addTicket);
   document.getElementById('dtt-filter-priority').addEventListener('change', renderBoard);
+  document.getElementById('dtt-threshold').addEventListener('change', e => saveThreshold(e.target.value));
   document.getElementById('dtt-archive-toggle').addEventListener('click', () => {
     const list = document.getElementById('dtt-archive-list');
     list.style.display = list.style.display === 'none' ? 'block' : 'none';
