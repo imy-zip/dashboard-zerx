@@ -62,7 +62,7 @@
     </div>
   </div>
 
-  <div id="dtt-stats" style="display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-bottom:20px;"></div>
+  <div id="dtt-stats" style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:10px; margin-bottom:20px;"></div>
 
   <div style="background:#131320; border-radius:12px; padding:16px; margin-bottom:22px;">
     <div style="font-size:13px; font-weight:500; margin-bottom:10px; color:#C7C7D9;">Nouvelle commande</div>
@@ -94,7 +94,7 @@
     <span style="margin-left:auto; font-size:11px; color:#6B6B84;">Trié par ancienneté dans chaque colonne</span>
   </div>
 
-  <div id="dtt-board" style="display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; align-items:start;"></div>
+  <div id="dtt-board" style="display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:12px; align-items:start;"></div>
 
   <button class="dtt-btn" id="dtt-archive-toggle" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:8px; padding:8px 14px; font-size:12px; margin-top:18px;">
     <i class="ti ti-archive" style="font-size:14px; vertical-align:-2px; margin-right:6px;" aria-hidden="true"></i>
@@ -110,6 +110,7 @@
     { id: 'commande',  label: 'Attente commande',  bg:'#2E1418', text:'#FF9B9B', alertHours: 7 * 24 },
     { id: 'reception', label: 'Attente réception',  bg:'#2E2410', text:'#FFC978', alertHours: 7 * 24 },
     { id: 'boxing',    label: 'Attente boxing',     bg:'#12233A', text:'#8FC1F7', alertHours: 2 * 24 },
+    { id: 'boxing_send', label: 'Boxing Send',      bg:'#1B1830', text:'#B3A6F7', alertHours: null },
     { id: 'boxe',      label: 'Boxé',               bg:'#0F2A28', text:'#7DE0D3', alertHours: 15 * 24 },
     { id: 'paiement',  label: 'Attente paiement',   bg:'#2A1230', text:'#E3A6F7', alertHours: 2 * 24 },
     { id: 'valide',    label: 'Validé',             bg:'#17301A', text:'#9FE08E', alertHours: null }
@@ -343,10 +344,10 @@
     const totalCommission = done.reduce((s, t) => s + (t.commission || 0), 0);
     const totalAmount = done.reduce((s, t) => s + (t.amount || 0), 0);
     const list = document.getElementById('dtt-archive-list');
-    const header = '<div style="display:flex; justify-content:space-between; align-items:center; padding:0 4px 10px; border-bottom:1px solid #1F1F2E; margin-bottom:6px; gap:16px;">' +
+    const header = '<div style="display:flex; align-items:center; gap:28px; padding:0 4px 10px; border-bottom:1px solid #1F1F2E; margin-bottom:6px;">' +
       '<div><div style="font-size:12px; color:#9797AC;">Total commandes</div>' +
         '<div class="dtt-display" style="font-size:16px; font-weight:600;">' + totalAmount.toFixed(2) + ' €</div></div>' +
-      '<div style="text-align:right;"><div style="font-size:12px; color:#9797AC;">Total commissions</div>' +
+      '<div><div style="font-size:12px; color:#9797AC;">Total commissions</div>' +
         '<div class="dtt-display" style="font-size:16px; font-weight:600; color:#9FE08E;">' + totalCommission.toFixed(2) + ' €</div></div>' +
     '</div>';
     const rows = done.length
