@@ -61,7 +61,7 @@
   <div style="background:#131320; border-radius:12px; padding:16px; margin-bottom:22px;">
     <div style="font-size:13px; font-weight:500; margin-bottom:10px; color:#C7C7D9;">Nouvelle commande</div>
     <div style="display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:8px; margin-bottom:8px;">
-      <input class="dtt-input" id="dtt-title" placeholder="Objet / produit" />
+      <input class="dtt-input" id="dtt-title" placeholder="Numéro ticket" />
       <input class="dtt-input" id="dtt-requester" placeholder="Client (pseudo)" />
       <input class="dtt-input" id="dtt-assignee" placeholder="Assigné à (optionnel)" />
     </div>
@@ -88,20 +88,27 @@
     <span style="margin-left:auto; font-size:11px; color:#6B6B84;">Trié par ancienneté dans chaque colonne</span>
   </div>
 
-  <div id="dtt-board" style="display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:12px; align-items:start;"></div>
+  <div id="dtt-board" style="display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; align-items:start;"></div>
+
+  <button class="dtt-btn" id="dtt-archive-toggle" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:8px; padding:8px 14px; font-size:12px; margin-top:18px;">
+    <i class="ti ti-archive" style="font-size:14px; vertical-align:-2px; margin-right:6px;" aria-hidden="true"></i>
+    <span id="dtt-archive-label">Voir les commandes validées (0)</span>
+  </button>
+  <div id="dtt-archive-list" style="display:none; margin-top:12px; background:#131320; border-radius:12px; padding:12px;"></div>
 
 </div>
 
 <script>
 (function() {
   const STATUSES = [
-    { id: 'commande',  label: 'Attente commande',  bg:'#2E1418', text:'#FF9B9B' },
-    { id: 'reception', label: 'Attente réception',  bg:'#2E2410', text:'#FFC978' },
-    { id: 'boxing',    label: 'Attente boxing',     bg:'#12233A', text:'#8FC1F7' },
-    { id: 'boxe',      label: 'Boxé',               bg:'#0F2A28', text:'#7DE0D3' },
-    { id: 'paiement',  label: 'Attente paiement',   bg:'#2A1230', text:'#E3A6F7' },
-    { id: 'valide',    label: 'Validé',             bg:'#17301A', text:'#9FE08E' }
+    { id: 'commande',  label: 'Attente commande',  bg:'#2E1418', text:'#FF9B9B', alertHours: 7 * 24 },
+    { id: 'reception', label: 'Attente réception',  bg:'#2E2410', text:'#FFC978', alertHours: 7 * 24 },
+    { id: 'boxing',    label: 'Attente boxing',     bg:'#12233A', text:'#8FC1F7', alertHours: 2 * 24 },
+    { id: 'boxe',      label: 'Boxé',               bg:'#0F2A28', text:'#7DE0D3', alertHours: 15 * 24 },
+    { id: 'paiement',  label: 'Attente paiement',   bg:'#2A1230', text:'#E3A6F7', alertHours: 2 * 24 },
+    { id: 'valide',    label: 'Validé',             bg:'#17301A', text:'#9FE08E', alertHours: null }
   ];
+  const ACTIVE_STATUSES = STATUSES.filter(s => s.id !== 'valide');
   const priorityStyle = {
     urgent:  { bg:'#2E1418', text:'#FF9B9B', label:'Urgent' },
     normal:  { bg:'#2E2410', text:'#FFC978', label:'Normal' },
@@ -121,11 +128,19 @@
     return Math.floor(hrs / 24) + ' j';
   }
 
-  function ageColor(ts) {
-    const hrs = (Date.now() - ts) / 3600000;
-    if (hrs > 48) return '#FF9B9B';
-    if (hrs > 12) return '#FFC978';
+  function ageColor(t) {
+    const s = statusOf(t.status);
+    const hrs = (Date.now() - t.createdAt) / 3600000;
+    if (!s.alertHours) return '#9797AC';
+    if (hrs >= s.alertHours) return '#FF9B9B';
+    if (hrs >= s.alertHours * 0.6) return '#FFC978';
     return '#9797AC';
+  }
+
+  function isOverdue(t) {
+    const s = statusOf(t.status);
+    if (!s.alertHours) return false;
+    return (Date.now() - t.createdAt) / 3600000 >= s.alertHours;
   }
 
   function escapeHtml(str) {
@@ -219,13 +234,18 @@
 
   function cardHtml(t) {
     const p = priorityStyle[t.priority];
-    return '<div class="dtt-card">' +
-      '<div style="font-size:13px; font-weight:500; margin-bottom:4px; overflow-wrap:break-word;">' + escapeHtml(t.title) + '</div>' +
+    const overdue = isOverdue(t);
+    const border = overdue ? 'border-left:3px solid #FF5C77;' : 'border-left:3px solid transparent;';
+    return '<div class="dtt-card" style="' + border + '">' +
+      '<div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">' +
+        (overdue ? '<i class="ti ti-flame" style="font-size:13px; color:#FF9B9B;" aria-hidden="true"></i>' : '') +
+        '<span class="dtt-mono" style="font-size:13px; font-weight:500; overflow-wrap:break-word;">' + escapeHtml(t.title) + '</span>' +
+      '</div>' +
       '<div style="font-size:11px; color:#8A8A9E; margin-bottom:8px;">' + escapeHtml(t.requester) +
         (t.assignee ? ' &middot; ' + escapeHtml(t.assignee) : '') + '</div>' +
       '<div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">' +
         '<span style="font-size:10px; padding:2px 7px; border-radius:5px; background:' + p.bg + '; color:' + p.text + ';">' + p.label + '</span>' +
-        '<span class="dtt-mono" style="font-size:11px; color:' + ageColor(t.createdAt) + ';">' + ageText(t.createdAt) + '</span>' +
+        '<span class="dtt-mono" style="font-size:11px; font-weight:500; color:' + ageColor(t) + ';">' + ageText(t.createdAt) + '</span>' +
       '</div>' +
       '<div style="display:flex; gap:6px; margin-top:8px;">' +
         '<select data-id="' + t.id + '" class="dtt-move dtt-input" style="font-size:11px; padding:5px 6px;">' +
@@ -241,7 +261,7 @@
   function renderBoard() {
     const filterPriority = document.getElementById('dtt-filter-priority').value;
     const board = document.getElementById('dtt-board');
-    board.innerHTML = STATUSES.map(s => {
+    board.innerHTML = ACTIVE_STATUSES.map(s => {
       let colTickets = tickets.filter(t => t.status === s.id &&
         (filterPriority === 'all' || t.priority === filterPriority));
       colTickets.sort((a, b) => a.createdAt - b.createdAt);
@@ -265,15 +285,38 @@
     });
   }
 
+  function renderArchive() {
+    const done = tickets.filter(t => t.status === 'valide').sort((a, b) => b.createdAt - a.createdAt);
+    document.getElementById('dtt-archive-label').textContent = 'Voir les commandes validées (' + done.length + ')';
+    const list = document.getElementById('dtt-archive-list');
+    list.innerHTML = done.length
+      ? done.map(t =>
+          '<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 4px; border-bottom:1px solid #1F1F2E;">' +
+            '<span class="dtt-mono" style="font-size:12px;">' + escapeHtml(t.title) + '</span>' +
+            '<span style="font-size:11px; color:#8A8A9E;">' + escapeHtml(t.requester) + '</span>' +
+            '<button data-id="' + t.id + '" class="dtt-btn dtt-remove-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Supprimer"><i class="ti ti-trash" style="font-size:13px;" aria-hidden="true"></i></button>' +
+          '</div>'
+        ).join('')
+      : '<div style="text-align:center; padding:12px 0; color:#4E4E64; font-size:12px;">Aucune commande validée.</div>';
+    list.querySelectorAll('.dtt-remove-archived').forEach(btn => {
+      btn.addEventListener('click', e => removeTicket(e.currentTarget.dataset.id));
+    });
+  }
+
   function render() {
     renderStats();
     renderOldest();
     renderBoard();
+    renderArchive();
   }
 
   initStatusSelect();
   document.getElementById('dtt-add').addEventListener('click', addTicket);
   document.getElementById('dtt-filter-priority').addEventListener('change', renderBoard);
+  document.getElementById('dtt-archive-toggle').addEventListener('click', () => {
+    const list = document.getElementById('dtt-archive-list');
+    list.style.display = list.style.display === 'none' ? 'block' : 'none';
+  });
   setInterval(render, 60000);
 
   load();
