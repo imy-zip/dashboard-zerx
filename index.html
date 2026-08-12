@@ -198,7 +198,29 @@
 
   function setStatus(id, status) {
     const t = tickets.find(x => x.id === id);
-    if (t) t.status = status;
+    if (!t) return;
+    if (status === 'valide') {
+      const amountInput = window.prompt('Montant de la commande (€) pour ' + t.title, t.amount != null ? t.amount : '');
+      if (amountInput === null) return;
+      const commissionInput = window.prompt('Montant de la commission prise (€) pour ' + t.title, t.commission != null ? t.commission : '');
+      if (commissionInput === null) return;
+      t.amount = Math.round(parseFloat(amountInput.replace(',', '.')) * 100) / 100 || 0;
+      t.commission = Math.round(parseFloat(commissionInput.replace(',', '.')) * 100) / 100 || 0;
+    }
+    t.status = status;
+    save();
+    render();
+  }
+
+  function editAmounts(id) {
+    const t = tickets.find(x => x.id === id);
+    if (!t) return;
+    const amountInput = window.prompt('Montant de la commande (€) pour ' + t.title, t.amount != null ? t.amount : '');
+    if (amountInput === null) return;
+    const commissionInput = window.prompt('Montant de la commission prise (€) pour ' + t.title, t.commission != null ? t.commission : '');
+    if (commissionInput === null) return;
+    t.amount = Math.round(parseFloat(amountInput.replace(',', '.')) * 100) / 100 || 0;
+    t.commission = Math.round(parseFloat(commissionInput.replace(',', '.')) * 100) / 100 || 0;
     save();
     render();
   }
@@ -314,18 +336,30 @@
   function renderArchive() {
     const done = tickets.filter(t => t.status === 'valide').sort((a, b) => b.createdAt - a.createdAt);
     document.getElementById('dtt-archive-label').textContent = 'Voir les commandes validées (' + done.length + ')';
+    const totalCommission = done.reduce((s, t) => s + (t.commission || 0), 0);
     const list = document.getElementById('dtt-archive-list');
-    list.innerHTML = done.length
+    const header = '<div style="display:flex; justify-content:space-between; align-items:center; padding:0 4px 10px; border-bottom:1px solid #1F1F2E; margin-bottom:6px;">' +
+      '<span style="font-size:12px; color:#9797AC;">Total commissions</span>' +
+      '<span class="dtt-display" style="font-size:16px; font-weight:600; color:#9FE08E;">' + totalCommission.toFixed(2) + ' €</span>' +
+    '</div>';
+    const rows = done.length
       ? done.map(t =>
-          '<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 4px; border-bottom:1px solid #1F1F2E;">' +
-            '<span class="dtt-mono" style="font-size:12px;">' + escapeHtml(t.title) + '</span>' +
-            '<span style="font-size:11px; color:#8A8A9E;">' + escapeHtml(t.requester) + '</span>' +
+          '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 4px; border-bottom:1px solid #1F1F2E;">' +
+            '<span class="dtt-mono" style="font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.title) + '</span>' +
+            '<span style="font-size:11px; color:#8A8A9E; white-space:nowrap;">' + escapeHtml(t.requester) + '</span>' +
+            '<span class="dtt-mono" style="font-size:12px; white-space:nowrap;">' + (t.amount || 0).toFixed(2) + ' €</span>' +
+            '<span class="dtt-mono" style="font-size:12px; color:#9FE08E; white-space:nowrap;">+' + (t.commission || 0).toFixed(2) + ' €</span>' +
+            '<button data-id="' + t.id + '" class="dtt-btn dtt-edit-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Modifier"><i class="ti ti-edit" style="font-size:13px;" aria-hidden="true"></i></button>' +
             '<button data-id="' + t.id + '" class="dtt-btn dtt-remove-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Supprimer"><i class="ti ti-trash" style="font-size:13px;" aria-hidden="true"></i></button>' +
           '</div>'
         ).join('')
       : '<div style="text-align:center; padding:12px 0; color:#4E4E64; font-size:12px;">Aucune commande validée.</div>';
+    list.innerHTML = header + rows;
     list.querySelectorAll('.dtt-remove-archived').forEach(btn => {
       btn.addEventListener('click', e => removeTicket(e.currentTarget.dataset.id));
+    });
+    list.querySelectorAll('.dtt-edit-archived').forEach(btn => {
+      btn.addEventListener('click', e => editAmounts(e.currentTarget.dataset.id));
     });
   }
 
