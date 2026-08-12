@@ -56,12 +56,12 @@
     <span style="font-size:11px; color:#6B6B84;">jour(s)</span>
   </div>
 
-  <div id="dtt-oldest" style="display:none; align-items:center; gap:14px; background:#2A1518; border:2px solid #FF5C77; border-radius:12px; padding:16px 20px; margin-bottom:18px;">
-    <i class="ti ti-alert-triangle" style="font-size:26px; color:#FF5C77; flex-shrink:0;" aria-hidden="true"></i>
-    <div style="flex:1; min-width:0;">
-      <div style="font-size:13px; color:#FF9B9B; font-weight:600; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:3px;">En attente depuis le plus longtemps</div>
-      <div id="dtt-oldest-text" style="font-size:16px; color:#EDEDF5; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+  <div id="dtt-oldest" style="display:none; flex-direction:column; gap:10px; background:#2A1518; border:2px solid #FF5C77; border-radius:12px; padding:16px 20px; margin-bottom:18px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <i class="ti ti-alert-triangle" style="font-size:22px; color:#FF5C77; flex-shrink:0;" aria-hidden="true"></i>
+      <div id="dtt-oldest-heading" style="font-size:13px; color:#FF9B9B; font-weight:600; text-transform:uppercase; letter-spacing:0.03em;">En retard</div>
     </div>
+    <div id="dtt-oldest-list"></div>
   </div>
 
   <div id="dtt-stats" style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:10px; margin-bottom:16px;"></div>
@@ -271,6 +271,21 @@
   }
 
   function askAmounts(t) {
+    let typeInput = window.prompt('Type de commande pour ' + t.title + ' — tape B ou R', t.orderType || 'R');
+    if (typeInput === null) return false;
+    typeInput = typeInput.trim().toUpperCase();
+    const type = (typeInput === 'B') ? 'B' : 'R';
+    t.orderType = type;
+
+    if (type === 'B') {
+      const commissionInput = window.prompt('Montant de la commission (€) pour ' + t.title, t.commission != null ? t.commission : '');
+      if (commissionInput === null) return false;
+      t.amount = 0;
+      t.commissionPct = null;
+      t.commission = Math.round(parseFloat(String(commissionInput).replace(',', '.')) * 100) / 100 || 0;
+      return true;
+    }
+
     const amountInput = window.prompt('Montant de la commande (€) pour ' + t.title, t.amount != null ? t.amount : '');
     if (amountInput === null) return false;
     const pctInput = window.prompt('Pourcentage de commission (%) pour ' + t.title, t.commissionPct != null ? t.commissionPct : '');
@@ -338,17 +353,23 @@
 
   function renderOldest() {
     const box = document.getElementById('dtt-oldest');
+    const list = document.getElementById('dtt-oldest-list');
     const active = tickets.filter(t => t.status !== 'valide');
-    if (active.length) {
-      const oldest = active.reduce((a, b) => a.createdAt < b.createdAt ? a : b);
-      const days = (Date.now() - oldest.createdAt) / 86400000;
-      if (days >= oldestThresholdDays) {
-        box.style.display = 'flex';
-        document.getElementById('dtt-oldest-text').textContent =
-          oldest.title + ' — ' + oldest.requester + ' · ' + statusOf(oldest.status).label + ' (' + ageText(oldest.createdAt) + ')';
-      } else {
-        box.style.display = 'none';
-      }
+    const late = active
+      .filter(t => (Date.now() - t.createdAt) / 86400000 >= oldestThresholdDays)
+      .sort((a, b) => a.createdAt - b.createdAt);
+
+    if (late.length) {
+      box.style.display = 'flex';
+      document.getElementById('dtt-oldest-heading').textContent = 'En retard (' + late.length + ')';
+      list.innerHTML = late.map(t =>
+        '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 0; border-top:1px solid #3A1F23;">' +
+          '<span style="font-size:14px; color:#EDEDF5; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' +
+            escapeHtml(t.title) + ' — ' + escapeHtml(t.requester) + ' · ' + statusOf(t.status).label +
+          '</span>' +
+          '<span class="dtt-mono" style="font-size:13px; color:#FF9B9B; flex-shrink:0;">' + ageText(t.createdAt) + '</span>' +
+        '</div>'
+      ).join('');
     } else {
       box.style.display = 'none';
     }
@@ -522,7 +543,7 @@
     const totalCommission = done.reduce((s, t) => s + (t.commission || 0), 0);
     const totalAmount = done.reduce((s, t) => s + (t.amount || 0), 0);
     const list = document.getElementById('dtt-archive-list');
-    const header = '<div style="display:flex; align-items:center; gap:28px; padding:0 4px 10px; border-bottom:1px solid #1F1F2E; margin-bottom:6px; min-width:760px;">' +
+    const header = '<div style="display:flex; align-items:center; gap:28px; padding:0 4px 10px; border-bottom:1px solid #1F1F2E; margin-bottom:6px; min-width:820px;">' +
       '<div><div style="font-size:12px; color:#9797AC;">Total commandes</div>' +
         '<div class="dtt-display" style="font-size:16px; font-weight:600;">' + totalAmount.toFixed(2) + ' €</div></div>' +
       '<div><div style="font-size:12px; color:#9797AC;">Total commissions</div>' +
@@ -531,13 +552,15 @@
     const rows = done.length
       ? done.map(t => {
           const vAt = getValidatedAt(t);
-          return '<div style="padding:8px 4px; border-bottom:1px solid #1F1F2E; min-width:760px;">' +
+          const typeColor = t.orderType === 'B' ? '#8FC1F7' : '#FFC978';
+          return '<div style="padding:8px 4px; border-bottom:1px solid #1F1F2E; min-width:820px;">' +
           '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">' +
+            '<span style="font-size:10px; padding:2px 7px; border-radius:5px; background:#171722; color:' + typeColor + '; font-weight:600; flex-shrink:0;">' + (t.orderType || 'R') + '</span>' +
             '<span class="dtt-mono" style="font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.title) + '</span>' +
             '<span style="font-size:11px; color:#8A8A9E; white-space:nowrap;">' + escapeHtml(t.requester) + '</span>' +
             '<span style="font-size:11px; color:#8A8A9E; white-space:nowrap;">' + (t.assignee ? escapeHtml(t.assignee) : '—') + '</span>' +
             '<span class="dtt-mono" style="font-size:11px; color:#6B6B84; white-space:nowrap;">' + (vAt ? fmtDateTime(vAt) : '—') + '</span>' +
-            '<span class="dtt-mono" style="font-size:12px; white-space:nowrap;">' + (t.amount || 0).toFixed(2) + ' €</span>' +
+            '<span class="dtt-mono" style="font-size:12px; white-space:nowrap;">' + (t.orderType === 'B' ? '—' : (t.amount || 0).toFixed(2) + ' €') + '</span>' +
             '<span style="font-size:11px; color:#6B6B84; white-space:nowrap;">' + (t.commissionPct != null ? t.commissionPct + '%' : '') + '</span>' +
             '<span class="dtt-mono" style="font-size:12px; color:#9FE08E; white-space:nowrap;">+' + (t.commission || 0).toFixed(2) + ' €</span>' +
             '<button data-id="' + t.id + '" class="dtt-btn dtt-hist-btn" aria-label="Historique"><i class="ti ti-history" style="font-size:13px;" aria-hidden="true"></i></button>' +
