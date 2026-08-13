@@ -4,25 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Suivi des commandes</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/tabler-icons.min.css">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: 'Inter', sans-serif;
+    font-family: -apple-system, 'Segoe UI', Roboto, Inter, Arial, sans-serif;
     background: #0C0C13;
     color: #EDEDF5;
     min-height: 100vh;
   }
-  .dtt-display { font-family: 'Space Grotesk', sans-serif; }
-  .dtt-mono { font-family: 'JetBrains Mono', monospace; }
+  .dtt-display { font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; }
+  .dtt-mono { font-family: ui-monospace, 'SFMono-Regular', Consolas, 'Courier New', monospace; }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-thumb { background: #2E2E42; border-radius: 3px; }
   .dtt-btn { cursor: pointer; border: none; transition: transform .1s, background .15s; }
   .dtt-btn:active { transform: scale(0.97); }
   .dtt-input {
-    font-family: 'Inter', sans-serif;
+    font-family: inherit;
     background: #171722;
     border: 1px solid #2A2A3D;
     color: #EDEDF5;
@@ -37,22 +35,40 @@
   .dtt-col { background: #131320; border-radius: 12px; padding: 12px; min-width: 200px; display: flex; flex-direction: column; }
   .dtt-card { background: #1B1B29; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: default; }
   .dtt-card:last-child { margin-bottom: 0; }
-  .dtt-hist-btn { background: transparent; padding: 4px 6px; color: #6B6B84; border-radius: 6px; }
+  .dtt-x-btn { background: transparent; padding: 4px 8px; color: #FF7A8A; border-radius: 6px; font-size: 15px; font-weight: 700; line-height: 1; }
+  .dtt-x-btn:hover { background: #2E1418; }
+  .dtt-icon-btn { background: transparent; padding: 5px 8px; border-radius: 6px; color: #9797AC; font-size: 13px; }
+  .dtt-icon-btn:hover { background: #22222E; }
   .dtt-hist-row { display:flex; align-items:center; gap:8px; font-size:11px; color:#9797AC; padding:3px 0; }
 </style>
 </head>
 <body>
 
-<div style="max-width: 1600px; margin: 0 auto; padding: 28px 32px;">
+<div id="dtt-lock" style="position:fixed; inset:0; background:#0C0C13; display:flex; align-items:center; justify-content:center; z-index:100;">
+  <div style="background:#131320; border:1px solid #2A2A3D; border-radius:14px; padding:28px 26px; width:280px; text-align:center;">
+    <div style="font-size:26px; margin-bottom:8px;">🔒</div>
+    <div id="dtt-lock-title" class="dtt-display" style="font-size:15px; font-weight:600; margin-bottom:14px;">Accès protégé</div>
+    <input type="password" id="dtt-lock-input" class="dtt-input" placeholder="Code d'accès" style="text-align:center; margin-bottom:8px;" />
+    <input type="password" id="dtt-lock-input2" class="dtt-input" placeholder="Confirmer le code" style="text-align:center; margin-bottom:10px; display:none;" />
+    <button class="dtt-btn" id="dtt-lock-submit" style="background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:9px 0; font-size:13px; font-weight:500; width:100%;">Valider</button>
+    <div id="dtt-lock-error" style="color:#FF9B9B; font-size:11px; margin-top:10px; display:none;">Code incorrect.</div>
+    <div style="color:#6B6B84; font-size:10px; margin-top:12px; line-height:1.5;">Ce code reste uniquement sur cet appareil et protège l'accès rapide à la page. Ce n'est pas un chiffrement fort — quelqu'un avec accès aux outils développeur du navigateur pourrait le contourner.</div>
+  </div>
+</div>
+
+<div id="dtt-app" style="max-width: 1600px; margin: 0 auto; padding: 28px 32px; display:none;">
 
   <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:8px;">
     <h1 class="dtt-display" style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.01em;">Suivi des commandes</h1>
-    <span id="dtt-sync" style="font-size:11px; color:#6B6B84;">chargement...</span>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span id="dtt-sync" style="font-size:11px; color:#6B6B84;">chargement...</span>
+      <button class="dtt-btn" id="dtt-change-pin" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:6px; padding:4px 10px; font-size:11px;">Changer le code</button>
+    </div>
   </div>
 
   <div id="dtt-oldest" style="display:none; flex-direction:column; gap:10px; background:#2A1518; border:2px solid #FF5C77; border-radius:12px; padding:16px 20px; margin-bottom:18px;">
     <div style="display:flex; align-items:center; gap:10px;">
-      <i class="ti ti-alert-triangle" style="font-size:22px; color:#FF5C77; flex-shrink:0;" aria-hidden="true"></i>
+      <span style="font-size:20px;">⚠️</span>
       <div id="dtt-oldest-heading" style="font-size:13px; color:#FF9B9B; font-weight:600; text-transform:uppercase; letter-spacing:0.03em;">En retard</div>
     </div>
     <div id="dtt-oldest-list"></div>
@@ -80,15 +96,11 @@
   <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:22px;">
     <div style="background:#131320; border-radius:12px; padding:14px 16px;">
       <div style="font-size:12px; color:#9797AC; margin-bottom:10px;">Commissions — ce mois-ci (par jour)</div>
-      <div style="position:relative; height:180px;">
-        <canvas id="dtt-chart-daily"></canvas>
-      </div>
+      <div id="dtt-chart-daily"></div>
     </div>
     <div style="background:#131320; border-radius:12px; padding:14px 16px;">
       <div style="font-size:12px; color:#9797AC; margin-bottom:10px;">Commissions — 6 derniers mois</div>
-      <div style="position:relative; height:180px;">
-        <canvas id="dtt-chart"></canvas>
-      </div>
+      <div id="dtt-chart-monthly"></div>
     </div>
   </div>
 
@@ -106,9 +118,7 @@
         <option value="low">Faible</option>
       </select>
       <select class="dtt-input" id="dtt-status"></select>
-      <button class="dtt-btn" id="dtt-add" style="background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:9px 20px; font-size:13px; font-weight:500; white-space:nowrap;">
-        <i class="ti ti-plus" style="font-size:15px; vertical-align:-2px; margin-right:4px;" aria-hidden="true"></i>Créer
-      </button>
+      <button class="dtt-btn" id="dtt-add" style="background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:9px 20px; font-size:13px; font-weight:500; white-space:nowrap;">+ Créer</button>
     </div>
   </div>
 
@@ -126,14 +136,12 @@
   <div id="dtt-board" style="display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:12px; align-items:start;"></div>
 
   <button class="dtt-btn" id="dtt-archive-toggle" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:8px; padding:8px 14px; font-size:12px; margin-top:18px;">
-    <i class="ti ti-archive" style="font-size:14px; vertical-align:-2px; margin-right:6px;" aria-hidden="true"></i>
-    <span id="dtt-archive-label">Voir les commandes validées (0)</span>
+    🗂 <span id="dtt-archive-label">Voir les commandes validées (0)</span>
   </button>
   <div id="dtt-archive-list" style="display:none; margin-top:12px; background:#131320; border-radius:12px; padding:12px; overflow-x:auto;"></div>
 
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script>
 (function() {
   const STATUSES = [
@@ -154,9 +162,9 @@
   const MONTH_NAMES = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 
   const KEY = 'tickets';
+  const PIN_KEY = 'dtt_pin';
   let tickets = [];
   let expandedHistory = {};
-  let chartInstance = null;
 
   function statusOf(id) { return STATUSES.find(s => s.id === id); }
 
@@ -218,7 +226,7 @@
     return t.status === 'valide' ? t.createdAt : null;
   }
 
-  function load() {
+  function loadData() {
     try {
       const raw = localStorage.getItem(KEY);
       tickets = raw ? JSON.parse(raw) : [];
@@ -317,14 +325,6 @@
     render();
   }
 
-  function applySimulatedAge(id, days) {
-    const t = tickets.find(x => x.id === id);
-    if (!t || isNaN(days)) return;
-    t.createdAt = Date.now() - days * 86400000;
-    save();
-    render();
-  }
-
   function toggleHistory(id) {
     expandedHistory[id] = !expandedHistory[id];
     render();
@@ -350,9 +350,7 @@
     const box = document.getElementById('dtt-oldest');
     const list = document.getElementById('dtt-oldest-list');
     const active = tickets.filter(t => t.status !== 'valide');
-    const late = active
-      .filter(t => isOverdue(t))
-      .sort((a, b) => a.createdAt - b.createdAt);
+    const late = active.filter(t => isOverdue(t)).sort((a, b) => a.createdAt - b.createdAt);
 
     if (late.length) {
       box.style.display = 'flex';
@@ -396,14 +394,24 @@
     document.getElementById('dtt-month-prev-commission').textContent = fmtEUR(prevCommission);
   }
 
-  let dailyChartInstance = null;
+  function barChartHtml(labels, values, color, thinLabels) {
+    const maxVal = Math.max.apply(null, values.concat([0.01]));
+    const bars = labels.map((l, i) => {
+      const h = Math.max(3, Math.round((values[i] / maxVal) * 120));
+      const showLabel = !thinLabels || i === 0 || i === labels.length - 1 || i % thinLabels === 0;
+      return '<div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:4px; height:140px; min-width:0;" title="' + escapeHtml(l) + ' : ' + fmtEUR(values[i]) + '">' +
+        '<div style="width:100%; max-width:28px; height:' + h + 'px; background:' + color + '; border-radius:4px 4px 0 0;"></div>' +
+        '<span style="font-size:9px; color:#9797AC; white-space:nowrap; visibility:' + (showLabel ? 'visible' : 'hidden') + ';">' + escapeHtml(l) + '</span>' +
+      '</div>';
+    }).join('');
+    return '<div style="display:flex; align-items:flex-end; gap:3px;">' + bars + '</div>';
+  }
 
   function renderDailyChart() {
-    if (typeof Chart === 'undefined') return;
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const labels = [];
-    const sums = [];
+    const values = [];
     for (let d = 1; d <= daysInMonth; d++) {
       let sum = 0;
       tickets.forEach(t => {
@@ -415,45 +423,19 @@
         }
       });
       labels.push(String(d));
-      sums.push(Math.round(sum * 100) / 100);
+      values.push(Math.round(sum * 100) / 100);
     }
-    const ctx = document.getElementById('dtt-chart-daily');
-    if (!ctx) return;
-    if (dailyChartInstance) dailyChartInstance.destroy();
-    dailyChartInstance = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          data: sums,
-          borderColor: '#6C5CE7',
-          backgroundColor: 'rgba(108,92,231,0.15)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false }, ticks: { color: '#9797AC', font: { size: 10 }, maxTicksLimit: 10 } },
-          y: { grid: { color: '#1F1F2E' }, ticks: { color: '#9797AC', font: { size: 11 } } }
-        }
-      }
-    });
+    document.getElementById('dtt-chart-daily').innerHTML = barChartHtml(labels, values, '#6C5CE7', 5);
   }
 
-  function renderChart() {
-    if (typeof Chart === 'undefined') return;
+  function renderMonthlyChart() {
     const now = new Date();
     const startYear = 2026, startMonthIdx = 7; // août 2026
     const startTotal = startYear * 12 + startMonthIdx;
     const nowTotal = now.getFullYear() * 12 + now.getMonth();
     const monthsBack = Math.min(5, Math.max(0, nowTotal - startTotal));
     const labels = [];
-    const sums = [];
+    const values = [];
     for (let i = monthsBack; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const k = monthKey(d);
@@ -464,39 +446,16 @@
         if (monthKey(new Date(vAt)) === k) sum += (t.commission || 0);
       });
       labels.push(MONTH_NAMES[d.getMonth()]);
-      sums.push(Math.round(sum * 100) / 100);
+      values.push(Math.round(sum * 100) / 100);
     }
-    const ctx = document.getElementById('dtt-chart');
-    if (!ctx) return;
-    if (chartInstance) chartInstance.destroy();
-    chartInstance = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [{
-          data: sums,
-          backgroundColor: '#6C5CE7',
-          borderRadius: 4,
-          maxBarThickness: 36
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false }, ticks: { color: '#9797AC', font: { size: 11 } } },
-          y: { grid: { color: '#1F1F2E' }, ticks: { color: '#9797AC', font: { size: 11 } } }
-        }
-      }
-    });
+    document.getElementById('dtt-chart-monthly').innerHTML = barChartHtml(labels, values, '#6C5CE7', 0);
   }
 
   function historyHtml(t) {
     if (!expandedHistory[t.id]) return '';
     const hist = getHistory(t);
     return '<div style="margin-top:8px; padding-top:8px; border-top:1px solid #26263A;">' +
-      hist.map(h => '<div class="dtt-hist-row"><i class="ti ti-point-filled" style="font-size:10px;" aria-hidden="true"></i>' +
+      hist.map(h => '<div class="dtt-hist-row"><span>•</span>' +
         '<span>' + escapeHtml(statusOf(h.status) ? statusOf(h.status).label : h.status) + '</span>' +
         '<span style="margin-left:auto;" class="dtt-mono">' + fmtDateTime(h.at) + '</span></div>').join('') +
     '</div>';
@@ -508,7 +467,7 @@
     const border = overdue ? 'border-left:3px solid #FF5C77;' : 'border-left:3px solid transparent;';
     return '<div class="dtt-card" style="' + border + '">' +
       '<div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">' +
-        (overdue ? '<i class="ti ti-flame" style="font-size:13px; color:#FF9B9B;" aria-hidden="true"></i>' : '') +
+        (overdue ? '<span style="font-size:12px;">🔥</span>' : '') +
         '<span class="dtt-mono" style="font-size:13px; font-weight:500; overflow-wrap:break-word;">' + escapeHtml(t.title) + '</span>' +
       '</div>' +
       '<div style="font-size:11px; color:#8A8A9E; margin-bottom:8px;">' + escapeHtml(t.requester) +
@@ -517,14 +476,12 @@
         '<span style="font-size:10px; padding:2px 7px; border-radius:5px; background:' + p.bg + '; color:' + p.text + ';">' + p.label + '</span>' +
         '<span class="dtt-mono" style="font-size:11px; font-weight:500; color:' + ageColor(t) + ';">' + ageText(t.createdAt) + '</span>' +
       '</div>' +
-      '<div style="display:flex; gap:6px; margin-top:8px;">' +
+      '<div style="display:flex; gap:4px; margin-top:8px; align-items:center;">' +
         '<select data-id="' + t.id + '" class="dtt-move dtt-input" style="font-size:11px; padding:5px 6px;">' +
           STATUSES.map(s => '<option value="' + s.id + '" ' + (t.status===s.id?'selected':'') + '>' + s.label + '</option>').join('') +
         '</select>' +
-        '<button data-id="' + t.id + '" class="dtt-btn dtt-hist-btn" aria-label="Historique"><i class="ti ti-history" style="font-size:14px;" aria-hidden="true"></i></button>' +
-        '<button data-id="' + t.id + '" class="dtt-btn dtt-remove" style="background:transparent; padding:5px 8px; border-radius:6px; color:#6B6B84;" aria-label="Supprimer">' +
-          '<i class="ti ti-trash" style="font-size:14px;" aria-hidden="true"></i>' +
-        '</button>' +
+        '<button data-id="' + t.id + '" class="dtt-btn dtt-icon-btn dtt-hist-btn" aria-label="Historique" title="Historique">🕘</button>' +
+        '<button data-id="' + t.id + '" class="dtt-btn dtt-x-btn dtt-remove" aria-label="Supprimer" title="Supprimer">✕</button>' +
       '</div>' +
       '<div style="display:flex; gap:6px; margin-top:6px; align-items:center;">' +
         '<span style="font-size:10px; color:#6B6B84; white-space:nowrap;">TEST — jours:</span>' +
@@ -539,6 +496,14 @@
     if (!q) return true;
     q = q.toLowerCase();
     return t.title.toLowerCase().includes(q) || t.requester.toLowerCase().includes(q);
+  }
+
+  function applySimulatedAge(id, days) {
+    const t = tickets.find(x => x.id === id);
+    if (!t || isNaN(days)) return;
+    t.createdAt = Date.now() - days * 86400000;
+    save();
+    render();
   }
 
   function renderBoard() {
@@ -607,9 +572,9 @@
             '<span class="dtt-mono" style="font-size:12px; white-space:nowrap;">' + (t.orderType === 'B' ? '—' : fmtEUR(t.amount)) + '</span>' +
             '<span style="font-size:11px; color:#6B6B84; white-space:nowrap;">' + (t.commissionPct != null ? t.commissionPct + '%' : '') + '</span>' +
             '<span class="dtt-mono" style="font-size:12px; color:#9FE08E; white-space:nowrap;">+' + fmtEUR(t.commission) + '</span>' +
-            '<button data-id="' + t.id + '" class="dtt-btn dtt-hist-btn" aria-label="Historique"><i class="ti ti-history" style="font-size:13px;" aria-hidden="true"></i></button>' +
-            '<button data-id="' + t.id + '" class="dtt-btn dtt-edit-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Modifier"><i class="ti ti-edit" style="font-size:13px;" aria-hidden="true"></i></button>' +
-            '<button data-id="' + t.id + '" class="dtt-btn dtt-remove-archived" style="background:transparent; padding:4px 6px; color:#6B6B84;" aria-label="Supprimer"><i class="ti ti-trash" style="font-size:13px;" aria-hidden="true"></i></button>' +
+            '<button data-id="' + t.id + '" class="dtt-btn dtt-icon-btn dtt-hist-btn" aria-label="Historique" title="Historique">🕘</button>' +
+            '<button data-id="' + t.id + '" class="dtt-btn dtt-icon-btn dtt-edit-archived" aria-label="Modifier" title="Modifier">✎</button>' +
+            '<button data-id="' + t.id + '" class="dtt-btn dtt-x-btn dtt-remove-archived" aria-label="Supprimer" title="Supprimer">✕</button>' +
           '</div>' +
           historyHtml(t) +
           '</div>';
@@ -632,7 +597,7 @@
     renderOldest();
     renderMonthStats();
     renderDailyChart();
-    renderChart();
+    renderMonthlyChart();
     renderBoard();
     renderArchive();
   }
@@ -647,7 +612,64 @@
   });
   setInterval(render, 60000);
 
-  load();
+  // --- Lock screen ---
+  function showApp() {
+    document.getElementById('dtt-lock').style.display = 'none';
+    document.getElementById('dtt-app').style.display = 'block';
+    loadData();
+  }
+
+  function setupLockScreen() {
+    const hasPin = !!localStorage.getItem(PIN_KEY);
+    const title = document.getElementById('dtt-lock-title');
+    const input1 = document.getElementById('dtt-lock-input');
+    const input2 = document.getElementById('dtt-lock-input2');
+    const err = document.getElementById('dtt-lock-error');
+    const submit = document.getElementById('dtt-lock-submit');
+
+    if (!hasPin) {
+      title.textContent = "Crée un code d'accès";
+      input1.placeholder = 'Nouveau code';
+      input2.style.display = 'block';
+    } else {
+      title.textContent = 'Accès protégé';
+      input2.style.display = 'none';
+    }
+
+    submit.onclick = function() {
+      err.style.display = 'none';
+      if (!localStorage.getItem(PIN_KEY)) {
+        const v1 = input1.value, v2 = input2.value;
+        if (!v1 || v1 !== v2) { err.textContent = 'Les deux codes ne correspondent pas.'; err.style.display = 'block'; return; }
+        localStorage.setItem(PIN_KEY, btoa(unescape(encodeURIComponent(v1))));
+        showApp();
+      } else {
+        const stored = localStorage.getItem(PIN_KEY);
+        if (btoa(unescape(encodeURIComponent(input1.value))) === stored) {
+          showApp();
+        } else {
+          err.textContent = 'Code incorrect.';
+          err.style.display = 'block';
+          input1.value = '';
+        }
+      }
+    };
+    input1.addEventListener('keydown', e => { if (e.key === 'Enter' && input2.style.display === 'none') submit.click(); });
+    input2.addEventListener('keydown', e => { if (e.key === 'Enter') submit.click(); });
+  }
+
+  document.getElementById('dtt-change-pin').addEventListener('click', function() {
+    const current = window.prompt('Code actuel :');
+    if (current === null) return;
+    const stored = localStorage.getItem(PIN_KEY);
+    if (btoa(unescape(encodeURIComponent(current))) !== stored) { window.alert('Code actuel incorrect.'); return; }
+    const next = window.prompt('Nouveau code :');
+    if (next === null || !next) return;
+    localStorage.setItem(PIN_KEY, btoa(unescape(encodeURIComponent(next))));
+    window.alert('Code mis à jour.');
+  });
+
+  setupLockScreen();
 })();
 </script>
 </body>
