@@ -52,9 +52,11 @@
     <input type="password" id="dtt-lock-input2" class="dtt-input" placeholder="Confirmer le code" style="text-align:center; margin-bottom:10px; display:none;" />
     <button class="dtt-btn" id="dtt-lock-submit" style="background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:9px 0; font-size:13px; font-weight:500; width:100%;">Valider</button>
     <div id="dtt-lock-error" style="color:#FF9B9B; font-size:11px; margin-top:10px; display:none;">Code incorrect.</div>
-    <div style="color:#6B6B84; font-size:10px; margin-top:12px; line-height:1.5;">Ce code reste uniquement sur cet appareil et protège l'accès rapide à la page. Ce n'est pas un chiffrement fort — quelqu'un avec accès aux outils développeur du navigateur pourrait le contourner.</div>
+    <div style="color:#6B6B84; font-size:10px; margin-top:12px; line-height:1.5;">Tes données sont chiffrées (AES-256) avec ce code sur cet appareil. Sans ce code, le contenu stocké est illisible — y compris pour quelqu'un qui inspecterait le navigateur. Personne d'autre n'a accès à ces données : rien n'est envoyé sur internet.</div>
   </div>
 </div>
+
+<div id="dtt-lock-loading" style="display:none; position:fixed; inset:0; background:#0C0C13; align-items:center; justify-content:center; z-index:100; color:#9797AC; font-size:13px;">Déverrouillage…</div>
 
 <div id="dtt-app" style="max-width: 1600px; margin: 0 auto; padding: 28px 32px; display:none;">
 
@@ -161,10 +163,50 @@
   };
   const MONTH_NAMES = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 
-  const KEY = 'tickets';
-  const PIN_KEY = 'dtt_pin';
+  const KEY = 'dtt_data_enc';
+  const SALT_KEY = 'dtt_salt';
+  const VERIFY_KEY = 'dtt_verify';
   let tickets = [];
   let expandedHistory = {};
+  let cryptoKey = null;
+
+  function bytesToBase64(bytes) {
+    let binary = '';
+    bytes.forEach(b => binary += String.fromCharCode(b));
+    return btoa(binary);
+  }
+  function base64ToBytes(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+  async function deriveKey(passcode, saltB64) {
+    const enc = new TextEncoder();
+    const salt = base64ToBytes(saltB64);
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(passcode), { name: 'PBKDF2' }, false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+  async function encryptToStr(key, obj) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const enc = new TextEncoder();
+    const data = enc.encode(JSON.stringify(obj));
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+    return bytesToBase64(iv) + '.' + bytesToBase64(new Uint8Array(cipher));
+  }
+  async function decryptFromStr(key, str) {
+    const parts = str.split('.');
+    const iv = base64ToBytes(parts[0]);
+    const cipherBytes = base64ToBytes(parts[1]);
+    const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipherBytes);
+    return JSON.parse(new TextDecoder().decode(plainBuf));
+  }
 
   function statusOf(id) { return STATUSES.find(s => s.id === id); }
 
@@ -226,20 +268,21 @@
     return t.status === 'valide' ? t.createdAt : null;
   }
 
-  function loadData() {
+  async function loadData() {
     try {
       const raw = localStorage.getItem(KEY);
-      tickets = raw ? JSON.parse(raw) : [];
+      tickets = raw ? await decryptFromStr(cryptoKey, raw) : [];
     } catch (e) {
       tickets = [];
     }
-    document.getElementById('dtt-sync').textContent = 'stocké sur cet appareil';
+    document.getElementById('dtt-sync').textContent = 'chiffré sur cet appareil';
     render();
   }
 
-  function save() {
+  async function save() {
     try {
-      localStorage.setItem(KEY, JSON.stringify(tickets));
+      const str = await encryptToStr(cryptoKey, tickets);
+      localStorage.setItem(KEY, str);
     } catch (e) {
       document.getElementById('dtt-sync').textContent = 'erreur de sauvegarde';
     }
@@ -612,7 +655,7 @@
   });
   setInterval(render, 60000);
 
-  // --- Lock screen ---
+  // --- Lock screen (AES-256 encryption derived from the passcode) ---
   function showApp() {
     document.getElementById('dtt-lock').style.display = 'none';
     document.getElementById('dtt-app').style.display = 'block';
@@ -620,14 +663,16 @@
   }
 
   function setupLockScreen() {
-    const hasPin = !!localStorage.getItem(PIN_KEY);
+    const hasVault = !!localStorage.getItem(SALT_KEY);
     const title = document.getElementById('dtt-lock-title');
     const input1 = document.getElementById('dtt-lock-input');
     const input2 = document.getElementById('dtt-lock-input2');
     const err = document.getElementById('dtt-lock-error');
     const submit = document.getElementById('dtt-lock-submit');
+    const loadingScreen = document.getElementById('dtt-lock-loading');
+    const lockScreen = document.getElementById('dtt-lock');
 
-    if (!hasPin) {
+    if (!hasVault) {
       title.textContent = "Crée un code d'accès";
       input1.placeholder = 'Nouveau code';
       input2.style.display = 'block';
@@ -636,18 +681,35 @@
       input2.style.display = 'none';
     }
 
-    submit.onclick = function() {
+    submit.onclick = async function() {
       err.style.display = 'none';
-      if (!localStorage.getItem(PIN_KEY)) {
+
+      if (!localStorage.getItem(SALT_KEY)) {
         const v1 = input1.value, v2 = input2.value;
         if (!v1 || v1 !== v2) { err.textContent = 'Les deux codes ne correspondent pas.'; err.style.display = 'block'; return; }
-        localStorage.setItem(PIN_KEY, btoa(unescape(encodeURIComponent(v1))));
+        lockScreen.style.display = 'none';
+        loadingScreen.style.display = 'flex';
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const saltB64 = bytesToBase64(salt);
+        localStorage.setItem(SALT_KEY, saltB64);
+        cryptoKey = await deriveKey(v1, saltB64);
+        localStorage.setItem(VERIFY_KEY, await encryptToStr(cryptoKey, 'unlock-ok'));
+        loadingScreen.style.display = 'none';
         showApp();
       } else {
-        const stored = localStorage.getItem(PIN_KEY);
-        if (btoa(unescape(encodeURIComponent(input1.value))) === stored) {
+        lockScreen.style.display = 'none';
+        loadingScreen.style.display = 'flex';
+        try {
+          const saltB64 = localStorage.getItem(SALT_KEY);
+          const key = await deriveKey(input1.value, saltB64);
+          const check = await decryptFromStr(key, localStorage.getItem(VERIFY_KEY));
+          if (check !== 'unlock-ok') throw new Error('bad pass');
+          cryptoKey = key;
+          loadingScreen.style.display = 'none';
           showApp();
-        } else {
+        } catch (e) {
+          loadingScreen.style.display = 'none';
+          lockScreen.style.display = 'flex';
           err.textContent = 'Code incorrect.';
           err.style.display = 'block';
           input1.value = '';
@@ -658,14 +720,27 @@
     input2.addEventListener('keydown', e => { if (e.key === 'Enter') submit.click(); });
   }
 
-  document.getElementById('dtt-change-pin').addEventListener('click', function() {
+  document.getElementById('dtt-change-pin').addEventListener('click', async function() {
     const current = window.prompt('Code actuel :');
     if (current === null) return;
-    const stored = localStorage.getItem(PIN_KEY);
-    if (btoa(unescape(encodeURIComponent(current))) !== stored) { window.alert('Code actuel incorrect.'); return; }
+    try {
+      const saltB64 = localStorage.getItem(SALT_KEY);
+      const oldKey = await deriveKey(current, saltB64);
+      const check = await decryptFromStr(oldKey, localStorage.getItem(VERIFY_KEY));
+      if (check !== 'unlock-ok') throw new Error('bad pass');
+    } catch (e) {
+      window.alert('Code actuel incorrect.');
+      return;
+    }
     const next = window.prompt('Nouveau code :');
     if (next === null || !next) return;
-    localStorage.setItem(PIN_KEY, btoa(unescape(encodeURIComponent(next))));
+    const newSalt = crypto.getRandomValues(new Uint8Array(16));
+    const newSaltB64 = bytesToBase64(newSalt);
+    const newKey = await deriveKey(next, newSaltB64);
+    localStorage.setItem(SALT_KEY, newSaltB64);
+    localStorage.setItem(VERIFY_KEY, await encryptToStr(newKey, 'unlock-ok'));
+    cryptoKey = newKey;
+    await save();
     window.alert('Code mis à jour.');
   });
 
