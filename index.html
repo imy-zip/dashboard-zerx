@@ -42,6 +42,12 @@
   .dtt-icon-btn { background: transparent; padding: 5px 8px; border-radius: 6px; color: #9797AC; font-size: 13px; }
   .dtt-icon-btn:hover { background: #22222E; }
   .dtt-hist-row { display:flex; align-items:center; gap:8px; font-size:11px; color:#9797AC; padding:3px 0; }
+  .dtt-sync-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  .dtt-sync-dot.pending { background:#FFC978; animation: dtt-pulse 0.9s ease-in-out infinite; }
+  .dtt-sync-dot.ok { background:#9FE08E; }
+  .dtt-sync-dot.err { background:#FF9B9B; }
+  .dtt-sync-dot.offline { background:#6B6B84; }
+  @keyframes dtt-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.35; transform:scale(0.8); } }
 </style>
 </head>
 <body>
@@ -67,7 +73,7 @@
   <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:8px;">
     <h1 class="dtt-display" style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.01em;">Suivi des commandes</h1>
     <div style="display:flex; align-items:center; gap:12px;">
-      <span id="dtt-sync" style="font-size:11px; color:#6B6B84;">chargement...</span>
+      <span style="font-size:11px; color:#6B6B84;"><span id="dtt-sync-dot" class="dtt-sync-dot offline"></span><span id="dtt-sync">chargement...</span></span>
       <button class="dtt-btn" id="dtt-export" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:6px; padding:4px 10px; font-size:11px;">⬇ Exporter (sauvegarde)</button>
       <button class="dtt-btn" id="dtt-import" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:6px; padding:4px 10px; font-size:11px;">⬆ Importer</button>
       <input type="file" id="dtt-import-file" accept="application/json" style="display:none;" />
@@ -91,7 +97,7 @@
       <div style="font-size:12px; color:#9797AC; margin-bottom:8px;" id="dtt-month-current-label">Ce mois-ci</div>
       <div style="display:flex; gap:20px;">
         <div><div style="font-size:11px; color:#6B6B84;">Commandes</div><div class="dtt-display" id="dtt-month-current-amount" style="font-size:18px; font-weight:600;">0,00 €</div></div>
-        <div><div style="font-size:11px; color:#6B6B84;">Commissions</div><div class="dtt-display" id="dtt-month-current-commission" style="font-size:18px; font-weight:600; color:#9FE08E;">0,00 €</div></div>
+        <div><div style="font-size:11px; color:#6B6B84;">Commissions</div><div style="display:flex; align-items:baseline; gap:8px;"><div class="dtt-display" id="dtt-month-current-commission" style="font-size:18px; font-weight:600; color:#9FE08E;">0,00 €</div><span id="dtt-month-change" style="display:none; align-items:center; font-size:11px; font-weight:600; padding:2px 8px; border-radius:12px;"></span></div></div>
       </div>
     </div>
     <div style="background:#131320; border-radius:10px; padding:14px;">
@@ -206,9 +212,20 @@
     return res.ok;
   }
 
+  let pendingSync = false;
+
+  function setSyncState(state, label) {
+    const dot = document.getElementById('dtt-sync-dot');
+    const text = document.getElementById('dtt-sync');
+    dot.className = 'dtt-sync-dot ' + state;
+    text.textContent = label;
+    pendingSync = (state === 'pending');
+  }
+
   async function pushCurrentEnvelopeToCloud() {
     const vaultId = localStorage.getItem(VAULT_ID_KEY);
-    if (!vaultId) return;
+    if (!vaultId) { setSyncState('offline', 'chiffré sur cet appareil'); return; }
+    setSyncState('pending', 'envoi vers le cloud…');
     try {
       const envelope = {
         salt: localStorage.getItem(SALT_KEY),
@@ -216,9 +233,9 @@
         data: localStorage.getItem(KEY) || null
       };
       const ok = await cloudPushEnvelope(vaultId, envelope);
-      document.getElementById('dtt-sync').textContent = ok ? 'chiffré · synchronisé ☁️' : 'chiffré · échec sync cloud';
+      setSyncState(ok ? 'ok' : 'err', ok ? 'synchronisé ☁️' : 'échec de sync cloud');
     } catch (e) {
-      document.getElementById('dtt-sync').textContent = 'chiffré sur cet appareil (hors ligne)';
+      setSyncState('offline', 'chiffré sur cet appareil (hors ligne)');
     }
   }
 
@@ -341,7 +358,7 @@
       } catch (e) {
         window.alert('Attention : impossible de déchiffrer les données existantes (fichier corrompu ou code différent de celui utilisé au moment de la sauvegarde). Rien n\'a été supprimé — contacte-moi avant d\'ajouter de nouveaux tickets pour éviter d\'écraser la sauvegarde existante.');
         tickets = [];
-        document.getElementById('dtt-sync').textContent = 'erreur de déchiffrement';
+        setSyncState('err', 'erreur de déchiffrement');
         render();
         return;
       }
@@ -359,7 +376,7 @@
         }
       } catch (e) { /* pas de données à récupérer */ }
     }
-    document.getElementById('dtt-sync').textContent = cloudReached ? 'chiffré · synchronisé ☁️' : 'chiffré sur cet appareil (hors ligne)';
+    setSyncState(cloudReached ? 'ok' : 'offline', cloudReached ? 'synchronisé ☁️' : 'chiffré sur cet appareil (hors ligne)');
     render();
     if (vaultId && cloudReached && !cloudData) {
       pushCurrentEnvelopeToCloud();
@@ -372,7 +389,7 @@
       localStorage.setItem(KEY, str);
       pushCurrentEnvelopeToCloud();
     } catch (e) {
-      document.getElementById('dtt-sync').textContent = 'erreur de sauvegarde';
+      setSyncState('err', 'erreur de sauvegarde');
     }
   }
 
@@ -503,9 +520,12 @@
 
   function renderMonthStats() {
     const now = new Date();
+    const today = now.getDate();
     const curKey = monthKey(now);
     const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const prevKey = monthKey(prevDate);
+    const daysInPrevMonth = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).getDate();
+    const prevCutoffDay = Math.min(today, daysInPrevMonth);
 
     let curAmount = 0, curCommission = 0, prevAmount = 0, prevCommission = 0;
     tickets.forEach(t => {
@@ -513,16 +533,37 @@
       if (vAt == null) return;
       const d = new Date(vAt);
       const k = monthKey(d);
-      if (k === curKey) { curAmount += (t.amount || 0); curCommission += (t.commission || 0); }
-      else if (k === prevKey) { prevAmount += (t.amount || 0); prevCommission += (t.commission || 0); }
+      if (k === curKey) {
+        curAmount += (t.amount || 0); curCommission += (t.commission || 0);
+      } else if (k === prevKey && d.getDate() <= prevCutoffDay) {
+        prevAmount += (t.amount || 0); prevCommission += (t.commission || 0);
+      }
     });
 
-    document.getElementById('dtt-month-current-label').textContent = MONTH_NAMES[now.getMonth()] + ' ' + now.getFullYear();
-    document.getElementById('dtt-month-prev-label').textContent = MONTH_NAMES[prevDate.getMonth()] + ' ' + prevDate.getFullYear();
+    let pctChange = null;
+    if (prevCommission > 0) {
+      pctChange = ((curCommission - prevCommission) / prevCommission) * 100;
+    } else if (curCommission > 0) {
+      pctChange = null; // pas de base de comparaison valable (0 → X n'est pas un vrai %)
+    }
+
+    document.getElementById('dtt-month-current-label').textContent = MONTH_NAMES[now.getMonth()] + ' ' + now.getFullYear() + ' (jusqu\'au ' + today + ')';
+    document.getElementById('dtt-month-prev-label').textContent = MONTH_NAMES[prevDate.getMonth()] + ' ' + prevDate.getFullYear() + ' (jusqu\'au ' + prevCutoffDay + ', même période)';
     document.getElementById('dtt-month-current-amount').textContent = fmtEUR(curAmount);
     document.getElementById('dtt-month-current-commission').textContent = fmtEUR(curCommission);
     document.getElementById('dtt-month-prev-amount').textContent = fmtEUR(prevAmount);
     document.getElementById('dtt-month-prev-commission').textContent = fmtEUR(prevCommission);
+
+    const badge = document.getElementById('dtt-month-change');
+    if (pctChange === null) {
+      badge.style.display = 'none';
+    } else {
+      badge.style.display = 'inline-flex';
+      const up = pctChange >= 0;
+      badge.style.background = up ? '#0F2A28' : '#2E1418';
+      badge.style.color = up ? '#7DE0D3' : '#FF9B9B';
+      badge.textContent = (up ? '▲ +' : '▼ ') + pctChange.toFixed(1).replace('.', ',') + '%';
+    }
   }
 
   function barChartHtml(labels, values, color, thinLabels) {
@@ -682,12 +723,18 @@
     document.getElementById('dtt-archive-label').textContent = 'Voir les commandes validées (' + done.length + ')';
     const totalCommission = done.reduce((s, t) => s + (t.commission || 0), 0);
     const totalAmount = done.reduce((s, t) => s + (t.amount || 0), 0);
+    const countB = done.filter(t => t.orderType === 'B').length;
+    const countR = done.length - countB;
+    const pctB = done.length ? Math.round((countB / done.length) * 100) : 0;
+    const pctR = done.length ? 100 - pctB : 0;
     const list = document.getElementById('dtt-archive-list');
     const header = '<div style="display:flex; align-items:center; gap:28px; padding:0 4px 10px; border-bottom:1px solid #1F1F2E; margin-bottom:6px; min-width:820px;">' +
       '<div><div style="font-size:12px; color:#9797AC;">Total commandes</div>' +
         '<div class="dtt-display" style="font-size:16px; font-weight:600;">' + fmtEUR(totalAmount) + '</div></div>' +
       '<div><div style="font-size:12px; color:#9797AC;">Total commissions</div>' +
         '<div class="dtt-display" style="font-size:16px; font-weight:600; color:#9FE08E;">' + fmtEUR(totalCommission) + '</div></div>' +
+      '<div><div style="font-size:12px; color:#9797AC;">Répartition R / B</div>' +
+        '<div class="dtt-display" style="font-size:16px; font-weight:600;"><span style="color:#FFC978;">' + pctR + '%</span> <span style="color:#4E4E64; font-weight:400;">/</span> <span style="color:#8FC1F7;">' + pctB + '%</span></div></div>' +
     '</div>';
     const rows = done.length
       ? done.map(t => {
@@ -961,6 +1008,14 @@
     cryptoKey = newKey;
     await save();
     window.alert('Code mis à jour.');
+  });
+
+  window.addEventListener('beforeunload', function(e) {
+    if (pendingSync) {
+      e.preventDefault();
+      e.returnValue = 'Une synchronisation vers le cloud est en cours — quitter maintenant risque de perdre la dernière modification.';
+      return e.returnValue;
+    }
   });
 
   setupLockScreen();
