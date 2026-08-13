@@ -47,14 +47,16 @@
 <body>
 
 <div id="dtt-lock" style="position:fixed; inset:0; background:#0C0C13; display:flex; align-items:center; justify-content:center; z-index:100;">
-  <div style="background:#131320; border:1px solid #2A2A3D; border-radius:14px; padding:28px 26px; width:280px; text-align:center;">
+  <div style="background:#131320; border:1px solid #2A2A3D; border-radius:14px; padding:28px 26px; width:300px; text-align:center;">
     <div style="font-size:26px; margin-bottom:8px;">🔒</div>
     <div id="dtt-lock-title" class="dtt-display" style="font-size:15px; font-weight:600; margin-bottom:14px;">Accès protégé</div>
+    <input type="text" id="dtt-lock-vault" class="dtt-input" placeholder="Identifiant de sauvegarde (vault_id)" style="text-align:center; margin-bottom:8px; display:none;" />
     <input type="password" id="dtt-lock-input" class="dtt-input" placeholder="Code d'accès" style="text-align:center; margin-bottom:8px;" />
     <input type="password" id="dtt-lock-input2" class="dtt-input" placeholder="Confirmer le code" style="text-align:center; margin-bottom:10px; display:none;" />
     <button class="dtt-btn" id="dtt-lock-submit" style="background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:9px 0; font-size:13px; font-weight:500; width:100%;">Valider</button>
     <div id="dtt-lock-error" style="color:#FF9B9B; font-size:11px; margin-top:10px; display:none;">Code incorrect.</div>
-    <div style="color:#6B6B84; font-size:10px; margin-top:12px; line-height:1.5;">Tes données sont chiffrées (AES-256) avec ce code sur cet appareil. Sans ce code, le contenu stocké est illisible — y compris pour quelqu'un qui inspecterait le navigateur. Personne d'autre n'a accès à ces données : rien n'est envoyé sur internet.</div>
+    <div id="dtt-lock-toggle" style="color:#8FC1F7; font-size:11px; margin-top:12px; cursor:pointer; text-decoration:underline; display:none;">Restaurer depuis une sauvegarde cloud existante</div>
+    <div style="color:#6B6B84; font-size:10px; margin-top:12px; line-height:1.5;">Tes données sont chiffrées (AES-256) avec ce code avant d'être sauvegardées. Même stockées sur le cloud, elles restent illisibles sans ce code.</div>
   </div>
 </div>
 
@@ -66,6 +68,10 @@
     <h1 class="dtt-display" style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.01em;">Suivi des commandes</h1>
     <div style="display:flex; align-items:center; gap:12px;">
       <span id="dtt-sync" style="font-size:11px; color:#6B6B84;">chargement...</span>
+      <button class="dtt-btn" id="dtt-export" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:6px; padding:4px 10px; font-size:11px;">⬇ Exporter (sauvegarde)</button>
+      <button class="dtt-btn" id="dtt-import" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:6px; padding:4px 10px; font-size:11px;">⬆ Importer</button>
+      <input type="file" id="dtt-import-file" accept="application/json" style="display:none;" />
+      <button class="dtt-btn" id="dtt-show-vault" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:6px; padding:4px 10px; font-size:11px;">🔑 Voir mon vault_id</button>
       <button class="dtt-btn" id="dtt-change-pin" style="background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:6px; padding:4px 10px; font-size:11px;">Changer le code</button>
     </div>
   </div>
@@ -172,6 +178,50 @@
   let expandedHistory = {};
   let cryptoKey = null;
 
+  const SUPABASE_URL = 'https://tvjhygsjamgynfvgikqc.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_bkW535cpV8HiuL9Q-HslpQ_8RvrRoGp';
+  const VAULT_ID_KEY = 'dtt_vault_id';
+
+  async function cloudFetchEnvelope(vaultId) {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/ticket_vaults?vault_id=eq.' + encodeURIComponent(vaultId) + '&select=blob', {
+      headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }
+    });
+    if (!res.ok) throw new Error('cloud fetch failed');
+    const rows = await res.json();
+    if (!rows.length) return null;
+    return JSON.parse(rows[0].blob);
+  }
+
+  async function cloudPushEnvelope(vaultId, envelope) {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/ticket_vaults', {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({ vault_id: vaultId, blob: JSON.stringify(envelope), updated_at: new Date().toISOString() })
+    });
+    return res.ok;
+  }
+
+  async function pushCurrentEnvelopeToCloud() {
+    const vaultId = localStorage.getItem(VAULT_ID_KEY);
+    if (!vaultId) return;
+    try {
+      const envelope = {
+        salt: localStorage.getItem(SALT_KEY),
+        verify: localStorage.getItem(VERIFY_KEY),
+        data: localStorage.getItem(KEY) || null
+      };
+      const ok = await cloudPushEnvelope(vaultId, envelope);
+      document.getElementById('dtt-sync').textContent = ok ? 'chiffré · synchronisé ☁️' : 'chiffré · échec sync cloud';
+    } catch (e) {
+      document.getElementById('dtt-sync').textContent = 'chiffré sur cet appareil (hors ligne)';
+    }
+  }
+
   function bytesToBase64(bytes) {
     let binary = '';
     bytes.forEach(b => binary += String.fromCharCode(b));
@@ -271,11 +321,31 @@
   }
 
   async function loadData() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      tickets = raw ? await decryptFromStr(cryptoKey, raw) : [];
-    } catch (e) {
+    const vaultId = localStorage.getItem(VAULT_ID_KEY);
+    let cloudData = null;
+    let cloudReached = false;
+    if (vaultId) {
+      try {
+        const envelope = await cloudFetchEnvelope(vaultId);
+        if (envelope && envelope.data) cloudData = envelope.data;
+        cloudReached = true;
+      } catch (e) { /* hors ligne, on retombe sur le local */ }
+    }
+
+    const raw = cloudData || localStorage.getItem(KEY);
+    if (!raw) {
       tickets = [];
+    } else {
+      try {
+        tickets = await decryptFromStr(cryptoKey, raw);
+      } catch (e) {
+        window.alert('Attention : impossible de déchiffrer les données existantes (fichier corrompu ou code différent de celui utilisé au moment de la sauvegarde). Rien n\'a été supprimé — contacte-moi avant d\'ajouter de nouveaux tickets pour éviter d\'écraser la sauvegarde existante.');
+        tickets = [];
+        document.getElementById('dtt-sync').textContent = 'erreur de déchiffrement';
+        render();
+        return;
+      }
+      if (cloudData) localStorage.setItem(KEY, raw);
     }
     if (!tickets.length) {
       try {
@@ -289,14 +359,18 @@
         }
       } catch (e) { /* pas de données à récupérer */ }
     }
-    document.getElementById('dtt-sync').textContent = 'chiffré sur cet appareil';
+    document.getElementById('dtt-sync').textContent = cloudReached ? 'chiffré · synchronisé ☁️' : 'chiffré sur cet appareil (hors ligne)';
     render();
+    if (vaultId && cloudReached && !cloudData) {
+      pushCurrentEnvelopeToCloud();
+    }
   }
 
   async function save() {
     try {
       const str = await encryptToStr(cryptoKey, tickets);
       localStorage.setItem(KEY, str);
+      pushCurrentEnvelopeToCloud();
     } catch (e) {
       document.getElementById('dtt-sync').textContent = 'erreur de sauvegarde';
     }
@@ -679,50 +753,51 @@
   function setupLockScreen() {
     const hasVault = !!localStorage.getItem(SALT_KEY);
     const title = document.getElementById('dtt-lock-title');
+    const vaultInput = document.getElementById('dtt-lock-vault');
     const input1 = document.getElementById('dtt-lock-input');
     const input2 = document.getElementById('dtt-lock-input2');
     const err = document.getElementById('dtt-lock-error');
     const submit = document.getElementById('dtt-lock-submit');
+    const toggle = document.getElementById('dtt-lock-toggle');
     const loadingScreen = document.getElementById('dtt-lock-loading');
     const lockScreen = document.getElementById('dtt-lock');
+    let restoreMode = false;
 
-    if (!hasVault) {
-      title.textContent = "Crée un code d'accès";
-      input1.placeholder = 'Nouveau code';
-      input2.style.display = 'block';
-    } else {
-      title.textContent = 'Accès protégé';
-      input2.style.display = 'none';
+    function paintMode() {
+      if (hasVault) {
+        title.textContent = 'Accès protégé';
+        vaultInput.style.display = 'none';
+        input2.style.display = 'none';
+        toggle.style.display = 'none';
+      } else if (!restoreMode) {
+        title.textContent = "Crée un code d'accès";
+        input1.placeholder = 'Nouveau code';
+        vaultInput.style.display = 'none';
+        input2.style.display = 'block';
+        toggle.style.display = 'block';
+        toggle.textContent = 'Restaurer depuis une sauvegarde cloud existante';
+      } else {
+        title.textContent = 'Restaurer ma sauvegarde';
+        input1.placeholder = 'Code utilisé lors de la création';
+        vaultInput.style.display = 'block';
+        input2.style.display = 'none';
+        toggle.style.display = 'block';
+        toggle.textContent = 'Créer un nouveau code à la place';
+      }
     }
+    paintMode();
+
+    toggle.onclick = function() {
+      restoreMode = !restoreMode;
+      err.style.display = 'none';
+      paintMode();
+    };
 
     submit.onclick = async function() {
       err.style.display = 'none';
 
-      if (!localStorage.getItem(SALT_KEY)) {
-        const v1 = input1.value, v2 = input2.value;
-        if (!v1 || v1 !== v2) { err.textContent = 'Les deux codes ne correspondent pas.'; err.style.display = 'block'; return; }
-        lockScreen.style.display = 'none';
-        loadingScreen.style.display = 'flex';
-        const salt = crypto.getRandomValues(new Uint8Array(16));
-        const saltB64 = bytesToBase64(salt);
-        localStorage.setItem(SALT_KEY, saltB64);
-        cryptoKey = await deriveKey(v1, saltB64);
-        localStorage.setItem(VERIFY_KEY, await encryptToStr(cryptoKey, 'unlock-ok'));
-
-        // Récupère d'anciennes données non chiffrées (versions précédentes de l'outil)
-        try {
-          const legacy = localStorage.getItem('tickets');
-          if (legacy) {
-            const legacyTickets = JSON.parse(legacy);
-            if (Array.isArray(legacyTickets) && legacyTickets.length) {
-              localStorage.setItem(KEY, await encryptToStr(cryptoKey, legacyTickets));
-            }
-          }
-        } catch (e) { /* pas de données à migrer */ }
-
-        loadingScreen.style.display = 'none';
-        showApp();
-      } else {
+      if (hasVault) {
+        // Déverrouillage normal, tout est déjà présent sur cet appareil
         lockScreen.style.display = 'none';
         loadingScreen.style.display = 'flex';
         try {
@@ -740,11 +815,121 @@
           err.style.display = 'block';
           input1.value = '';
         }
+        return;
       }
+
+      if (restoreMode) {
+        // Restauration depuis Supabase avec vault_id + code d'origine
+        const vaultId = vaultInput.value.trim();
+        if (!vaultId || !input1.value) { err.textContent = 'Renseigne l\'identifiant et le code.'; err.style.display = 'block'; return; }
+        lockScreen.style.display = 'none';
+        loadingScreen.style.display = 'flex';
+        try {
+          const envelope = await cloudFetchEnvelope(vaultId);
+          if (!envelope) throw new Error('vault introuvable');
+          const key = await deriveKey(input1.value, envelope.salt);
+          const check = await decryptFromStr(key, envelope.verify);
+          if (check !== 'unlock-ok') throw new Error('bad pass');
+          localStorage.setItem(SALT_KEY, envelope.salt);
+          localStorage.setItem(VERIFY_KEY, envelope.verify);
+          if (envelope.data) localStorage.setItem(KEY, envelope.data);
+          localStorage.setItem(VAULT_ID_KEY, vaultId);
+          cryptoKey = key;
+          loadingScreen.style.display = 'none';
+          showApp();
+        } catch (e) {
+          loadingScreen.style.display = 'none';
+          lockScreen.style.display = 'flex';
+          err.textContent = 'Identifiant ou code incorrect.';
+          err.style.display = 'block';
+        }
+        return;
+      }
+
+      // Création d'un nouveau coffre
+      const v1 = input1.value, v2 = input2.value;
+      if (!v1 || v1 !== v2) { err.textContent = 'Les deux codes ne correspondent pas.'; err.style.display = 'block'; return; }
+      lockScreen.style.display = 'none';
+      loadingScreen.style.display = 'flex';
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const saltB64 = bytesToBase64(salt);
+      localStorage.setItem(SALT_KEY, saltB64);
+      cryptoKey = await deriveKey(v1, saltB64);
+      const verifyStr = await encryptToStr(cryptoKey, 'unlock-ok');
+      localStorage.setItem(VERIFY_KEY, verifyStr);
+
+      const vaultId = crypto.randomUUID();
+      localStorage.setItem(VAULT_ID_KEY, vaultId);
+
+      // Récupère d'anciennes données non chiffrées (versions précédentes de l'outil)
+      try {
+        const legacy = localStorage.getItem('tickets');
+        if (legacy) {
+          const legacyTickets = JSON.parse(legacy);
+          if (Array.isArray(legacyTickets) && legacyTickets.length) {
+            localStorage.setItem(KEY, await encryptToStr(cryptoKey, legacyTickets));
+          }
+        }
+      } catch (e) { /* pas de données à migrer */ }
+
+      await cloudPushEnvelope(vaultId, {
+        salt: saltB64,
+        verify: verifyStr,
+        data: localStorage.getItem(KEY) || null
+      });
+
+      loadingScreen.style.display = 'none';
+      window.alert('Ton identifiant de sauvegarde (vault_id) :\n\n' + vaultId + '\n\nNote-le quelque part de sûr — il te servira, avec ton code, à restaurer tes données sur un autre appareil ou navigateur si celui-ci perd tout. Tu le retrouveras aussi dans le bouton "Voir mon vault_id" une fois connecté.');
+      showApp();
     };
-    input1.addEventListener('keydown', e => { if (e.key === 'Enter' && input2.style.display === 'none') submit.click(); });
+    input1.addEventListener('keydown', e => { if (e.key === 'Enter' && input2.style.display === 'none' && vaultInput.style.display === 'none') submit.click(); });
     input2.addEventListener('keydown', e => { if (e.key === 'Enter') submit.click(); });
+    vaultInput.addEventListener('keydown', e => { if (e.key === 'Enter') submit.click(); });
   }
+
+  document.getElementById('dtt-show-vault').addEventListener('click', function() {
+    const vaultId = localStorage.getItem(VAULT_ID_KEY);
+    window.alert(vaultId ? 'Ton identifiant de sauvegarde (vault_id) :\n\n' + vaultId + '\n\nÀ garder avec ton code pour restaurer tes données ailleurs.' : 'Aucun vault_id trouvé sur cet appareil.');
+  });
+
+  document.getElementById('dtt-export').addEventListener('click', function() {
+    const blob = new Blob([JSON.stringify(tickets, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const d = new Date();
+    const stamp = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    a.href = url;
+    a.download = 'sauvegarde-tickets-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('dtt-import').addEventListener('click', function() {
+    document.getElementById('dtt-import-file').click();
+  });
+
+  document.getElementById('dtt-import-file').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async function() {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!Array.isArray(parsed)) throw new Error('format invalide');
+        if (!window.confirm('Remplacer les données actuelles par cette sauvegarde (' + parsed.length + ' élément(s)) ? Cette action écrase ce qui est affiché actuellement.')) return;
+        tickets = parsed;
+        await save();
+        render();
+        window.alert('Sauvegarde importée.');
+      } catch (err) {
+        window.alert('Fichier invalide ou corrompu.');
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  });
 
   document.getElementById('dtt-change-pin').addEventListener('click', async function() {
     const current = window.prompt('Code actuel :');
