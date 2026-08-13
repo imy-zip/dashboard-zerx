@@ -806,8 +806,16 @@
           const check = await decryptFromStr(key, localStorage.getItem(VERIFY_KEY));
           if (check !== 'unlock-ok') throw new Error('bad pass');
           cryptoKey = key;
+          let freshVaultId = null;
+          if (!localStorage.getItem(VAULT_ID_KEY)) {
+            freshVaultId = crypto.randomUUID();
+            localStorage.setItem(VAULT_ID_KEY, freshVaultId);
+          }
           loadingScreen.style.display = 'none';
           showApp();
+          if (freshVaultId) {
+            window.alert('Ton coffre existant vient d\'être relié au cloud.\n\nTon identifiant de sauvegarde (vault_id) :\n\n' + freshVaultId + '\n\nNote-le quelque part de sûr — il te servira, avec ton code, à restaurer tes données ailleurs.');
+          }
         } catch (e) {
           loadingScreen.style.display = 'none';
           lockScreen.style.display = 'flex';
