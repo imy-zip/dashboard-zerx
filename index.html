@@ -45,7 +45,6 @@
   .dtt-compact .dtt-card { padding:6px 8px; margin-bottom:5px; }
   .dtt-compact .dtt-card .dtt-mono { font-size:11px; }
   .dtt-compact .dtt-card select.dtt-move { font-size:10px; padding:3px 4px; }
-  .dtt-compact .dtt-card .dtt-test-row { display:none; }
   .dtt-compact .dtt-col { padding:8px; }
   .dtt-sync-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; }
   .dtt-sync-dot.pending { background:#FFC978; animation: dtt-pulse 0.9s ease-in-out infinite; }
@@ -837,11 +836,6 @@
         '</select>' +
         '<button data-id="' + t.id + '" class="dtt-btn dtt-icon-btn dtt-hist-btn" aria-label="Historique" title="Historique">🕘</button>' +
       '</div>' +
-      '<div class="dtt-test-row" style="display:flex; gap:6px; margin-top:6px; align-items:center;">' +
-        '<span style="font-size:10px; color:#6B6B84; white-space:nowrap;">TEST — jours:</span>' +
-        '<input type="number" step="0.1" class="dtt-input dtt-sim-input" data-id="' + t.id + '" style="width:56px; padding:4px 6px; font-size:11px;" placeholder="0" />' +
-        '<button data-id="' + t.id + '" class="dtt-btn dtt-sim-apply" style="background:#2A2A3D; color:#EDEDF5; border-radius:6px; padding:4px 10px; font-size:11px; white-space:nowrap;">Appliquer</button>' +
-      '</div>' +
       historyHtml(t) +
     '</div>';
   }
@@ -850,14 +844,6 @@
     if (!q) return true;
     q = q.toLowerCase();
     return t.title.toLowerCase().includes(q) || t.requester.toLowerCase().includes(q);
-  }
-
-  function applySimulatedAge(id, days) {
-    const t = tickets.find(x => x.id === id);
-    if (!t || isNaN(days)) return;
-    t.createdAt = Date.now() - days * 86400000;
-    save();
-    render();
   }
 
   function renderBoard() {
@@ -889,13 +875,6 @@
     });
     board.querySelectorAll('.dtt-hist-btn').forEach(btn => {
       btn.addEventListener('click', e => toggleHistory(e.currentTarget.dataset.id));
-    });
-    board.querySelectorAll('.dtt-sim-apply').forEach(btn => {
-      btn.addEventListener('click', e => {
-        const id = e.currentTarget.dataset.id;
-        const input = board.querySelector('.dtt-sim-input[data-id="' + id + '"]');
-        applySimulatedAge(id, parseFloat(input.value));
-      });
     });
     board.querySelectorAll('.dtt-client-link').forEach(el => {
       el.addEventListener('click', e => openClientModal(e.currentTarget.dataset.client));
