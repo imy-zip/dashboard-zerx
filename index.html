@@ -180,6 +180,10 @@
   </div>
 </div>
 
+<div id="dtt-generic-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); align-items:center; justify-content:center; z-index:120;">
+  <div id="dtt-generic-modal-box" style="background:#131320; border:1px solid #2A2A3D; border-radius:14px; padding:22px; width:90%; max-width:360px;"></div>
+</div>
+
 <script>
 (function() {
   const STATUSES = [
@@ -378,7 +382,7 @@
       try {
         tickets = await decryptFromStr(cryptoKey, raw);
       } catch (e) {
-        window.alert('Attention : impossible de déchiffrer les données existantes (fichier corrompu ou code différent de celui utilisé au moment de la sauvegarde). Rien n\'a été supprimé — contacte-moi avant d\'ajouter de nouveaux tickets pour éviter d\'écraser la sauvegarde existante.');
+        dttAlert('Attention : impossible de déchiffrer les données existantes (fichier corrompu ou code différent de celui utilisé au moment de la sauvegarde). Rien n\'a été supprimé — contacte-moi avant d\'ajouter de nouveaux tickets pour éviter d\'écraser la sauvegarde existante.');
         tickets = [];
         setSyncState('err', 'erreur de déchiffrement');
         render();
@@ -440,39 +444,21 @@
     render();
   }
 
-  function askAmounts(t) {
-    let typeInput = window.prompt('Type de commande pour ' + t.title + ' — tape B ou R', t.orderType || 'R');
-    if (typeInput === null) return false;
-    typeInput = typeInput.trim().toUpperCase();
-    const type = (typeInput === 'B') ? 'B' : 'R';
-    t.orderType = type;
-
-    if (type === 'B') {
-      const commissionInput = window.prompt('Montant de la commission (€) pour ' + t.title, t.commission != null ? t.commission : '');
-      if (commissionInput === null) return false;
-      t.amount = 0;
-      t.commissionPct = null;
-      t.commission = Math.round(parseFloat(String(commissionInput).replace(',', '.')) * 100) / 100 || 0;
-      return true;
-    }
-
-    const amountInput = window.prompt('Montant de la commande (€) pour ' + t.title, t.amount != null ? t.amount : '');
-    if (amountInput === null) return false;
-    const pctInput = window.prompt('Pourcentage de commission (%) pour ' + t.title, t.commissionPct != null ? t.commissionPct : '');
-    if (pctInput === null) return false;
-    const amount = Math.round(parseFloat(String(amountInput).replace(',', '.')) * 100) / 100 || 0;
-    const pct = Math.round(parseFloat(String(pctInput).replace(',', '.')) * 100) / 100 || 0;
-    t.amount = amount;
-    t.commissionPct = pct;
-    t.commission = Math.round(amount * pct) / 100;
+  async function askAmounts(t) {
+    const result = await dttOrderModal(t);
+    if (!result) return false;
+    t.orderType = result.orderType;
+    t.amount = result.amount;
+    t.commissionPct = result.commissionPct;
+    t.commission = result.commission;
     return true;
   }
 
-  function setStatus(id, status) {
+  async function setStatus(id, status) {
     const t = tickets.find(x => x.id === id);
     if (!t) return;
     if (status === 'valide') {
-      if (!askAmounts(t)) return;
+      if (!(await askAmounts(t))) { render(); return; }
     }
     t.status = status;
     pushHistory(t, status);
@@ -480,16 +466,16 @@
     render();
   }
 
-  function editAmounts(id) {
+  async function editAmounts(id) {
     const t = tickets.find(x => x.id === id);
     if (!t) return;
-    if (askAmounts(t)) { save(); render(); }
+    if (await askAmounts(t)) { save(); render(); }
   }
 
-  function removeTicket(id) {
+  async function removeTicket(id) {
     const t = tickets.find(x => x.id === id);
     const label = t ? (t.title + ' — ' + t.requester) : 'ce ticket';
-    if (!window.confirm('Supprimer définitivement ' + label + ' ? Cette action est irréversible.')) return;
+    if (!(await dttConfirm('Supprimer définitivement ' + label + ' ?\nCette action est irréversible.', 'Supprimer'))) return;
     tickets = tickets.filter(x => x.id !== id);
     save();
     render();
@@ -539,6 +525,109 @@
   }
 
   function monthKey(d) { return d.getFullYear() + '-' + d.getMonth(); }
+
+  // --- Modales stylées (remplacent alert/confirm/prompt du navigateur) ---
+  const modalOverlay = document.getElementById('dtt-generic-modal');
+  const modalBox = document.getElementById('dtt-generic-modal-box');
+
+  function closeGenericModal() {
+    modalOverlay.style.display = 'none';
+    modalBox.innerHTML = '';
+  }
+
+  function dttAlert(message) {
+    return new Promise(resolve => {
+      modalBox.innerHTML =
+        '<div style="font-size:14px; color:#EDEDF5; line-height:1.5; white-space:pre-line; margin-bottom:18px;">' + escapeHtml(message) + '</div>' +
+        '<button class="dtt-btn" id="dtt-gm-ok" style="background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:9px 0; font-size:13px; font-weight:500; width:100%;">OK</button>';
+      modalOverlay.style.display = 'flex';
+      const finish = () => { closeGenericModal(); resolve(); };
+      document.getElementById('dtt-gm-ok').onclick = finish;
+      document.getElementById('dtt-gm-ok').focus();
+    });
+  }
+
+  function dttConfirm(message, confirmLabel) {
+    return new Promise(resolve => {
+      modalBox.innerHTML =
+        '<div style="font-size:14px; color:#EDEDF5; line-height:1.5; white-space:pre-line; margin-bottom:18px;">' + escapeHtml(message) + '</div>' +
+        '<div style="display:flex; gap:8px;">' +
+          '<button class="dtt-btn" id="dtt-gm-cancel" style="flex:1; background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:8px; padding:9px 0; font-size:13px;">Annuler</button>' +
+          '<button class="dtt-btn" id="dtt-gm-confirm" style="flex:1; background:#FF5C77; color:#fff; border-radius:8px; padding:9px 0; font-size:13px; font-weight:500;">' + escapeHtml(confirmLabel || 'Confirmer') + '</button>' +
+        '</div>';
+      modalOverlay.style.display = 'flex';
+      const finish = (val) => { closeGenericModal(); resolve(val); };
+      document.getElementById('dtt-gm-cancel').onclick = () => finish(false);
+      document.getElementById('dtt-gm-confirm').onclick = () => finish(true);
+    });
+  }
+
+  function dttPrompt(message, defaultValue, inputType) {
+    return new Promise(resolve => {
+      modalBox.innerHTML =
+        '<div style="font-size:14px; color:#EDEDF5; line-height:1.5; margin-bottom:12px;">' + escapeHtml(message) + '</div>' +
+        '<input type="' + (inputType || 'text') + '" id="dtt-gm-input" class="dtt-input" style="margin-bottom:14px;" value="' + escapeHtml(defaultValue != null ? String(defaultValue) : '') + '" />' +
+        '<div style="display:flex; gap:8px;">' +
+          '<button class="dtt-btn" id="dtt-gm-cancel" style="flex:1; background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:8px; padding:9px 0; font-size:13px;">Annuler</button>' +
+          '<button class="dtt-btn" id="dtt-gm-ok" style="flex:1; background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:9px 0; font-size:13px; font-weight:500;">Valider</button>' +
+        '</div>';
+      modalOverlay.style.display = 'flex';
+      const input = document.getElementById('dtt-gm-input');
+      input.focus();
+      input.select();
+      const finish = (val) => { closeGenericModal(); resolve(val); };
+      document.getElementById('dtt-gm-cancel').onclick = () => finish(null);
+      document.getElementById('dtt-gm-ok').onclick = () => finish(input.value);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(input.value); if (e.key === 'Escape') finish(null); });
+    });
+  }
+
+  // Modale dédiée : type B/R + montants, en un seul écran
+  function dttOrderModal(t) {
+    return new Promise(resolve => {
+      let type = t.orderType || 'R';
+
+      function paint() {
+        modalBox.innerHTML =
+          '<div style="font-size:14px; color:#EDEDF5; font-weight:600; margin-bottom:14px;">Valider — ' + escapeHtml(t.title) + '</div>' +
+          '<div style="display:flex; gap:8px; margin-bottom:14px;">' +
+            '<button class="dtt-btn dtt-type-btn" data-type="R" style="flex:1; border-radius:8px; padding:9px 0; font-size:13px; font-weight:600; border:1px solid ' + (type==='R' ? '#FFC978' : '#2A2A3D') + '; background:' + (type==='R' ? '#2E2410' : 'transparent') + '; color:' + (type==='R' ? '#FFC978' : '#9797AC') + ';">R</button>' +
+            '<button class="dtt-btn dtt-type-btn" data-type="B" style="flex:1; border-radius:8px; padding:9px 0; font-size:13px; font-weight:600; border:1px solid ' + (type==='B' ? '#8FC1F7' : '#2A2A3D') + '; background:' + (type==='B' ? '#12233A' : 'transparent') + '; color:' + (type==='B' ? '#8FC1F7' : '#9797AC') + ';">B</button>' +
+          '</div>' +
+          (type === 'R'
+            ? '<label style="font-size:11px; color:#9797AC;">Montant de la commande (€)</label>' +
+              '<input type="number" step="0.01" id="dtt-gm-amount" class="dtt-input" style="margin:4px 0 10px;" value="' + (t.amount != null ? t.amount : '') + '" />' +
+              '<label style="font-size:11px; color:#9797AC;">Pourcentage de commission (%)</label>' +
+              '<input type="number" step="0.1" id="dtt-gm-pct" class="dtt-input" style="margin:4px 0 14px;" value="' + (t.commissionPct != null ? t.commissionPct : '') + '" />'
+            : '<label style="font-size:11px; color:#9797AC;">Montant de la commission (€)</label>' +
+              '<input type="number" step="0.01" id="dtt-gm-commission" class="dtt-input" style="margin:4px 0 14px;" value="' + (t.commission != null ? t.commission : '') + '" />'
+          ) +
+          '<div style="display:flex; gap:8px;">' +
+            '<button class="dtt-btn" id="dtt-gm-cancel" style="flex:1; background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:8px; padding:9px 0; font-size:13px;">Annuler</button>' +
+            '<button class="dtt-btn" id="dtt-gm-ok" style="flex:1; background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:9px 0; font-size:13px; font-weight:500;">Valider</button>' +
+          '</div>';
+
+        modalBox.querySelectorAll('.dtt-type-btn').forEach(btn => {
+          btn.onclick = () => { type = btn.dataset.type; paint(); };
+        });
+        document.getElementById('dtt-gm-cancel').onclick = () => { closeGenericModal(); resolve(null); };
+        document.getElementById('dtt-gm-ok').onclick = () => {
+          if (type === 'B') {
+            const commission = Math.round(parseFloat(String(document.getElementById('dtt-gm-commission').value).replace(',', '.')) * 100) / 100 || 0;
+            closeGenericModal();
+            resolve({ orderType: 'B', amount: 0, commissionPct: null, commission });
+          } else {
+            const amount = Math.round(parseFloat(String(document.getElementById('dtt-gm-amount').value).replace(',', '.')) * 100) / 100 || 0;
+            const pct = Math.round(parseFloat(String(document.getElementById('dtt-gm-pct').value).replace(',', '.')) * 100) / 100 || 0;
+            closeGenericModal();
+            resolve({ orderType: 'R', amount, commissionPct: pct, commission: Math.round(amount * pct) / 100 });
+          }
+        };
+      }
+      paint();
+      modalOverlay.style.display = 'flex';
+    });
+  }
 
   function clientKey(name) { return (name || '').trim().toLowerCase(); }
 
@@ -978,7 +1067,7 @@
           loadingScreen.style.display = 'none';
           showApp();
           if (freshVaultId) {
-            window.alert('Ton coffre existant vient d\'être relié au cloud.\n\nTon identifiant de sauvegarde (vault_id) :\n\n' + freshVaultId + '\n\nNote-le quelque part de sûr — il te servira, avec ton code, à restaurer tes données ailleurs.');
+            dttAlert('Ton coffre existant vient d\'être relié au cloud.\n\nTon identifiant de sauvegarde (vault_id) :\n\n' + freshVaultId + '\n\nNote-le quelque part de sûr — il te servira, avec ton code, à restaurer tes données ailleurs.');
           }
         } catch (e) {
           loadingScreen.style.display = 'none';
@@ -1051,7 +1140,7 @@
       });
 
       loadingScreen.style.display = 'none';
-      window.alert('Ton identifiant de sauvegarde (vault_id) :\n\n' + vaultId + '\n\nNote-le quelque part de sûr — il te servira, avec ton code, à restaurer tes données sur un autre appareil ou navigateur si celui-ci perd tout. Tu le retrouveras aussi dans le bouton "Voir mon vault_id" une fois connecté.');
+      await dttAlert('Ton identifiant de sauvegarde (vault_id) :\n\n' + vaultId + '\n\nNote-le quelque part de sûr — il te servira, avec ton code, à restaurer tes données sur un autre appareil ou navigateur si celui-ci perd tout. Tu le retrouveras aussi dans le bouton "Voir mon vault_id" une fois connecté.');
       showApp();
     };
     input1.addEventListener('keydown', e => { if (e.key === 'Enter' && input2.style.display === 'none' && vaultInput.style.display === 'none') submit.click(); });
@@ -1061,7 +1150,7 @@
 
   document.getElementById('dtt-show-vault').addEventListener('click', function() {
     const vaultId = localStorage.getItem(VAULT_ID_KEY);
-    window.alert(vaultId ? 'Ton identifiant de sauvegarde (vault_id) :\n\n' + vaultId + '\n\nÀ garder avec ton code pour restaurer tes données ailleurs.' : 'Aucun vault_id trouvé sur cet appareil.');
+    dttAlert(vaultId ? 'Ton identifiant de sauvegarde (vault_id) :\n\n' + vaultId + '\n\nÀ garder avec ton code pour restaurer tes données ailleurs.' : 'Aucun vault_id trouvé sur cet appareil.');
   });
 
   document.getElementById('dtt-export').addEventListener('click', function() {
@@ -1090,41 +1179,70 @@
       try {
         const parsed = JSON.parse(reader.result);
         if (!Array.isArray(parsed)) throw new Error('format invalide');
-        if (!window.confirm('Remplacer les données actuelles par cette sauvegarde (' + parsed.length + ' élément(s)) ? Cette action écrase ce qui est affiché actuellement.')) return;
+        if (!(await dttConfirm('Remplacer les données actuelles par cette sauvegarde (' + parsed.length + ' élément(s)) ?\nCette action écrase ce qui est affiché actuellement.', 'Remplacer'))) { e.target.value = ''; return; }
         tickets = parsed;
         await save();
         render();
-        window.alert('Sauvegarde importée.');
+        dttAlert('Sauvegarde importée.');
       } catch (err) {
-        window.alert('Fichier invalide ou corrompu.');
+        dttAlert('Fichier invalide ou corrompu.');
       }
       e.target.value = '';
     };
     reader.readAsText(file);
   });
 
+  function dttChangePinModal() {
+    return new Promise(resolve => {
+      modalBox.innerHTML =
+        '<div style="font-size:14px; color:#EDEDF5; font-weight:600; margin-bottom:14px;">Changer le code d\'accès</div>' +
+        '<label style="font-size:11px; color:#9797AC;">Code actuel</label>' +
+        '<input type="password" id="dtt-gm-current" class="dtt-input" style="margin:4px 0 10px;" />' +
+        '<label style="font-size:11px; color:#9797AC;">Nouveau code</label>' +
+        '<input type="password" id="dtt-gm-next" class="dtt-input" style="margin:4px 0 6px;" />' +
+        '<div id="dtt-gm-pin-error" style="color:#FF9B9B; font-size:11px; margin-bottom:8px; display:none;"></div>' +
+        '<div style="display:flex; gap:8px; margin-top:6px;">' +
+          '<button class="dtt-btn" id="dtt-gm-cancel" style="flex:1; background:transparent; border:1px solid #2A2A3D; color:#9797AC; border-radius:8px; padding:9px 0; font-size:13px;">Annuler</button>' +
+          '<button class="dtt-btn" id="dtt-gm-ok" style="flex:1; background:#6C5CE7; color:#F2F0FF; border-radius:8px; padding:9px 0; font-size:13px; font-weight:500;">Valider</button>' +
+        '</div>';
+      modalOverlay.style.display = 'flex';
+      document.getElementById('dtt-gm-current').focus();
+      const finish = (val) => { closeGenericModal(); resolve(val); };
+      document.getElementById('dtt-gm-cancel').onclick = () => finish(null);
+      document.getElementById('dtt-gm-ok').onclick = () => {
+        const current = document.getElementById('dtt-gm-current').value;
+        const next = document.getElementById('dtt-gm-next').value;
+        if (!current || !next) {
+          const err = document.getElementById('dtt-gm-pin-error');
+          err.textContent = 'Renseigne les deux champs.';
+          err.style.display = 'block';
+          return;
+        }
+        finish({ current, next });
+      };
+    });
+  }
+
   document.getElementById('dtt-change-pin').addEventListener('click', async function() {
-    const current = window.prompt('Code actuel :');
-    if (current === null) return;
+    const vals = await dttChangePinModal();
+    if (!vals) return;
     try {
       const saltB64 = localStorage.getItem(SALT_KEY);
-      const oldKey = await deriveKey(current, saltB64);
+      const oldKey = await deriveKey(vals.current, saltB64);
       const check = await decryptFromStr(oldKey, localStorage.getItem(VERIFY_KEY));
       if (check !== 'unlock-ok') throw new Error('bad pass');
     } catch (e) {
-      window.alert('Code actuel incorrect.');
+      dttAlert('Code actuel incorrect.');
       return;
     }
-    const next = window.prompt('Nouveau code :');
-    if (next === null || !next) return;
     const newSalt = crypto.getRandomValues(new Uint8Array(16));
     const newSaltB64 = bytesToBase64(newSalt);
-    const newKey = await deriveKey(next, newSaltB64);
+    const newKey = await deriveKey(vals.next, newSaltB64);
     localStorage.setItem(SALT_KEY, newSaltB64);
     localStorage.setItem(VERIFY_KEY, await encryptToStr(newKey, 'unlock-ok'));
     cryptoKey = newKey;
     await save();
-    window.alert('Code mis à jour.');
+    dttAlert('Code mis à jour.');
   });
 
   window.addEventListener('beforeunload', function(e) {
