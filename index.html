@@ -33,8 +33,10 @@
   .dtt-input:focus { border-color: #6C5CE7; }
   .dtt-input::placeholder { color: #6B6B84; }
   .dtt-col { background: #131320; border-radius: 12px; padding: 12px; min-width: 200px; display: flex; flex-direction: column; }
-  .dtt-card { background: #1B1B29; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: default; }
+  .dtt-card { background: #1B1B29; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: default; position: relative; }
   .dtt-card:last-child { margin-bottom: 0; }
+  .dtt-x-corner { position: absolute; top: 6px; right: 6px; background: transparent; padding: 2px 6px; color: #6B6B84; border-radius: 6px; font-size: 13px; font-weight: 700; line-height: 1; }
+  .dtt-x-corner:hover { background: #2E1418; color: #FF7A8A; }
   .dtt-x-btn { background: transparent; padding: 4px 8px; color: #FF7A8A; border-radius: 6px; font-size: 15px; font-weight: 700; line-height: 1; }
   .dtt-x-btn:hover { background: #2E1418; }
   .dtt-icon-btn { background: transparent; padding: 5px 8px; border-radius: 6px; color: #9797AC; font-size: 13px; }
@@ -275,6 +277,18 @@
     } catch (e) {
       tickets = [];
     }
+    if (!tickets.length) {
+      try {
+        const legacy = localStorage.getItem('tickets');
+        if (legacy) {
+          const legacyTickets = JSON.parse(legacy);
+          if (Array.isArray(legacyTickets) && legacyTickets.length) {
+            tickets = legacyTickets;
+            await save();
+          }
+        }
+      } catch (e) { /* pas de données à récupérer */ }
+    }
     document.getElementById('dtt-sync').textContent = 'chiffré sur cet appareil';
     render();
   }
@@ -509,7 +523,8 @@
     const overdue = isOverdue(t);
     const border = overdue ? 'border-left:3px solid #FF5C77;' : 'border-left:3px solid transparent;';
     return '<div class="dtt-card" style="' + border + '">' +
-      '<div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">' +
+      '<button data-id="' + t.id + '" class="dtt-btn dtt-x-corner dtt-remove" aria-label="Supprimer" title="Supprimer">✕</button>' +
+      '<div style="display:flex; align-items:center; gap:6px; margin-bottom:4px; padding-right:16px;">' +
         (overdue ? '<span style="font-size:12px;">🔥</span>' : '') +
         '<span class="dtt-mono" style="font-size:13px; font-weight:500; overflow-wrap:break-word;">' + escapeHtml(t.title) + '</span>' +
       '</div>' +
@@ -524,7 +539,6 @@
           STATUSES.map(s => '<option value="' + s.id + '" ' + (t.status===s.id?'selected':'') + '>' + s.label + '</option>').join('') +
         '</select>' +
         '<button data-id="' + t.id + '" class="dtt-btn dtt-icon-btn dtt-hist-btn" aria-label="Historique" title="Historique">🕘</button>' +
-        '<button data-id="' + t.id + '" class="dtt-btn dtt-x-btn dtt-remove" aria-label="Supprimer" title="Supprimer">✕</button>' +
       '</div>' +
       '<div style="display:flex; gap:6px; margin-top:6px; align-items:center;">' +
         '<span style="font-size:10px; color:#6B6B84; white-space:nowrap;">TEST — jours:</span>' +
@@ -694,6 +708,18 @@
         localStorage.setItem(SALT_KEY, saltB64);
         cryptoKey = await deriveKey(v1, saltB64);
         localStorage.setItem(VERIFY_KEY, await encryptToStr(cryptoKey, 'unlock-ok'));
+
+        // Récupère d'anciennes données non chiffrées (versions précédentes de l'outil)
+        try {
+          const legacy = localStorage.getItem('tickets');
+          if (legacy) {
+            const legacyTickets = JSON.parse(legacy);
+            if (Array.isArray(legacyTickets) && legacyTickets.length) {
+              localStorage.setItem(KEY, await encryptToStr(cryptoKey, legacyTickets));
+            }
+          }
+        } catch (e) { /* pas de données à migrer */ }
+
         loadingScreen.style.display = 'none';
         showApp();
       } else {
