@@ -306,11 +306,11 @@
   function statusOf(id) { return STATUSES.find(s => s.id === id); }
 
   function ageText(ts) {
-    const mins = Math.floor((Date.now() - ts) / 60000);
-    if (mins < 60) return mins + ' min';
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return hrs + ' h';
-    return Math.floor(hrs / 24) + ' j';
+    const start = new Date(ts); start.setHours(0, 0, 0, 0);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const days = Math.round((now - start) / 86400000);
+    if (days <= 0) return "auj.";
+    return days + 'j';
   }
 
   function isOverdue(t) {
