@@ -646,19 +646,19 @@
   }
 
   function renderBestClient() {
-    const spentByClient = {};
+    const commissionByClient = {};
     tickets.filter(t => t.status === 'valide').forEach(t => {
       const key = clientKey(t.requester);
       if (!key) return;
-      if (!spentByClient[key]) spentByClient[key] = { name: t.requester, total: 0 };
-      spentByClient[key].total += (t.amount || 0) + (t.orderType === 'B' ? (t.commission || 0) : 0);
+      if (!commissionByClient[key]) commissionByClient[key] = { name: t.requester, total: 0 };
+      commissionByClient[key].total += (t.commission || 0);
     });
-    const list = Object.values(spentByClient).sort((a, b) => b.total - a.total);
+    const list = Object.values(commissionByClient).sort((a, b) => b.total - a.total);
     const nameEl = document.getElementById('dtt-best-client-name');
     const amountEl = document.getElementById('dtt-best-client-amount');
     if (list.length) {
       nameEl.textContent = list[0].name;
-      amountEl.textContent = fmtEUR(list[0].total) + ' au total';
+      amountEl.textContent = fmtEUR(list[0].total) + ' de commission';
       document.getElementById('dtt-best-client-card').onclick = () => openClientModal(list[0].name);
     } else {
       nameEl.textContent = '—';
